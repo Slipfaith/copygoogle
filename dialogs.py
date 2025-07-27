@@ -111,6 +111,7 @@ class BatchMappingDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         layout.addWidget(buttons)
+
         self.setLayout(layout)
 
     def select_all_sheets(self):
@@ -368,7 +369,9 @@ class DropArea(QFrame):
 
         self.setLayout(layout)
 
-        self.mousePressEvent = self.open_file_dialog
+    def mouseDoubleClickEvent(self, event):
+        self.open_file_dialog()
+        super().mouseDoubleClickEvent(event)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -420,7 +423,7 @@ class DropArea(QFrame):
             """
         )
 
-    def open_file_dialog(self, event):
+    def open_file_dialog(self):
         if self.accept_multiple:
             files, _ = QFileDialog.getOpenFileNames(
                 self,

@@ -13,8 +13,7 @@ from PySide6.QtWidgets import (
     QPushButton, QTextEdit, QProgressBar, QLabel, QFrame,
     QMessageBox, QFileDialog, QLineEdit, QDialog, QDialogButtonBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
-    QGroupBox, QSpinBox, QTabWidget, QListWidget, QListWidgetItem,
-    QSplitter, QCheckBox
+    QGroupBox, QSpinBox, QTabWidget, QListWidget, QListWidgetItem
 )
 from PySide6.QtCore import Qt, QThread, Signal, QMimeData, QTimer
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPalette, QColor, QFont, QIcon
@@ -103,12 +102,14 @@ class MainWindow(QMainWindow):
         self.single_config = None
         self.batch_files = []
         self.batch_mappings = []
+        self.log_file = None
+        self.log_file_path = None
         
         self.init_ui()
         
     def init_ui(self):
         self.setWindowTitle("Excel → Google Таблицы")
-        self.setMinimumSize(800, 700)
+        self.setMinimumSize(600, 500)
         
         # Центральный виджет
         central_widget = QWidget()
@@ -234,29 +235,15 @@ class MainWindow(QMainWindow):
         batch_info.setStyleSheet("color: #1976D2; font-weight: bold; margin-bottom: 10px;")
         batch_layout.addWidget(batch_info)
         
-        # Разделитель для файлов и списка
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        
-        # Левая часть - drag&drop
-        left_widget = QWidget()
-        left_layout = QVBoxLayout()
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        
+        # Область выбора файлов
         self.batch_drop_area = DropArea(accept_multiple=True)
         self.batch_drop_area.files_dropped.connect(self.on_batch_files_dropped)
-        left_layout.addWidget(self.batch_drop_area)
-        
-        left_widget.setLayout(left_layout)
-        
-        # Правая часть - список файлов
-        right_widget = QWidget()
-        right_layout = QVBoxLayout()
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        
+        batch_layout.addWidget(self.batch_drop_area)
+
         files_label = QLabel("📁 Выбранные файлы:")
         files_label.setStyleSheet("font-weight: bold;")
-        right_layout.addWidget(files_label)
-        
+        batch_layout.addWidget(files_label)
+
         self.files_list = QListWidget()
         self.files_list.setStyleSheet("""
             QListWidget {
@@ -265,29 +252,20 @@ class MainWindow(QMainWindow):
                 background-color: #f9f9f9;
             }
         """)
-        right_layout.addWidget(self.files_list)
-        
-        # Кнопки управления списком
+        batch_layout.addWidget(self.files_list)
+
         list_buttons = QHBoxLayout()
-        
+
         clear_btn = QPushButton("Очистить")
         clear_btn.clicked.connect(self.clear_batch_files)
         list_buttons.addWidget(clear_btn)
-        
+
         remove_btn = QPushButton("Удалить выбранные")
         remove_btn.clicked.connect(self.remove_selected_files)
         list_buttons.addWidget(remove_btn)
-        
+
         list_buttons.addStretch()
-        right_layout.addLayout(list_buttons)
-        
-        right_widget.setLayout(right_layout)
-        
-        splitter.addWidget(left_widget)
-        splitter.addWidget(right_widget)
-        splitter.setSizes([400, 300])
-        
-        batch_layout.addWidget(splitter)
+        batch_layout.addLayout(list_buttons)
         
         # Кнопки для пакетного режима
         batch_buttons = QHBoxLayout()
@@ -466,10 +444,16 @@ class MainWindow(QMainWindow):
         
         # Очистка лога
         self.log_text.clear()
+        header = [
+            f"Начало обработки: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"Excel файл: {os.path.basename(self.single_file)}",
+            f"Google Таблица: {self.google_url_input.text().strip()}"
+        ]
+        self.open_log_file(header)
+        self.log_message(f"Лог файл: {self.log_file_path}")
         self.log_message(f"{'='*50}")
-        self.log_message(f"Начало обработки: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        self.log_message(f"Excel файл: {os.path.basename(self.single_file)}")
-        self.log_message(f"Google Таблица: {self.google_url_input.text().strip()}")
+        for line in header:
+            self.log_message(line)
         self.log_message(f"{'='*50}")
         
         # Создание и запуск потока
@@ -550,10 +534,18 @@ class MainWindow(QMainWindow):
         
         # Очистка лога
         self.log_text.clear()
+        header = [
+            f"Начало пакетной обработки: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"Файлов для обработки: {len(self.batch_mappings)}",
+            f"Google Таблица: {self.google_url_input.text().strip()}"
+        ]
+        for m in self.batch_mappings:
+            header.append(f"{os.path.basename(m['excel_path'])} -> {m['google_sheet']}")
+        self.open_log_file(header)
+        self.log_message(f"Лог файл: {self.log_file_path}")
         self.log_message(f"{'='*50}")
-        self.log_message(f"Начало пакетной обработки: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        self.log_message(f"Файлов для обработки: {len(self.batch_mappings)}")
-        self.log_message(f"Google Таблица: {self.google_url_input.text().strip()}")
+        for line in header:
+            self.log_message(line)
         self.log_message(f"{'='*50}")
         
         # Создание и запуск потока
@@ -597,6 +589,21 @@ class MainWindow(QMainWindow):
         """Скрытие прогресс-бара"""
         self.progress_bar.setVisible(False)
         self.status_label.setText("")
+
+    def open_log_file(self, header_lines):
+        logs_dir = BASE_DIR / "logs"
+        logs_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_file_path = logs_dir / f"log_{timestamp}.txt"
+        self.log_file = open(self.log_file_path, "w", encoding="utf-8")
+        for line in header_lines:
+            self.log_file.write(line + "\n")
+        self.log_file.write("\n")
+
+    def close_log_file(self):
+        if self.log_file:
+            self.log_file.close()
+            self.log_file = None
     
     def update_progress(self, current: int, total: int, item_name: str):
         """Обновление прогресс-бара"""
@@ -614,6 +621,10 @@ class MainWindow(QMainWindow):
         """Добавление сообщения в лог"""
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_text.append(f"[{timestamp}] {message}")
+
+        if self.log_file:
+            self.log_file.write(f"[{timestamp}] {message}\n")
+
         
         # Автопрокрутка вниз
         scrollbar = self.log_text.verticalScrollBar()
@@ -624,7 +635,11 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(100)
         self.progress_bar.setFormat("✓ Обработка завершена")
         self.status_label.setText("✓ Все операции выполнены успешно")
-        
+
+        if self.log_file:
+            self.log_file.close()
+            self.log_file = None
+
         self.log_message(f"{'='*50}")
         self.log_message(f"✓ Обработка завершена: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
@@ -647,7 +662,11 @@ class MainWindow(QMainWindow):
         self.log_message(f"❌ ОШИБКА: {error_message}")
         self.hide_progress()
         self.status_label.setText("❌ Произошла ошибка")
-        
+
+        if self.log_file:
+            self.log_file.close()
+            self.log_file = None
+
         # Восстановление UI
         self.enable_ui()
         

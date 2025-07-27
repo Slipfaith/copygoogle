@@ -26,12 +26,19 @@ class Config:
     start_row: int = 1
 
 
+BASE_DIR = Path(__file__).resolve().parent
+
+
 class ExcelToGoogleSheets:
     """Класс для копирования данных из Excel в Google Таблицы"""
-    
+
     def __init__(self, config_path: str = "config.yaml"):
-        self.config_path = config_path
-        self.config = self._load_config(config_path)
+        # Приводим путь к конфигурации к абсолютному, относительно директории скрипта
+        path = Path(config_path)
+        if not path.is_absolute():
+            path = BASE_DIR / path
+        self.config_path = str(path)
+        self.config = self._load_config(self.config_path)
         self.logger = self._setup_logger()
         self.gc = None
         self.google_sheet = None
@@ -123,8 +130,14 @@ class ExcelToGoogleSheets:
                 raise ValueError("ID Google таблицы не указан")
             
             # Проверка существования файла credentials
-            if not os.path.exists(self.config.credentials_path):
-                raise FileNotFoundError(f"Файл credentials не найден: {self.config.credentials_path}")
+            cred_path = Path(self.config.credentials_path)
+            if not cred_path.is_absolute():
+                cred_path = Path(self.config_path).parent / cred_path
+            if not cred_path.exists():
+                raise FileNotFoundError(f"Файл credentials не найден: {cred_path}")
+
+            # Сохраняем абсолютный путь для последующего использования
+            self.config.credentials_path = str(cred_path)
             
             # Авторизация (только если еще не авторизованы)
             if not self.gc:
@@ -416,8 +429,15 @@ class ExcelToGoogleSheets:
             log_callback(message)
 
 
-def create_sample_config(path: str = "config.yaml"):
+def create_sample_config(path: str | None = None):
     """Создание примера конфигурационного файла"""
+    if path is None:
+        path = BASE_DIR / "config.yaml"
+    else:
+        path = Path(path)
+        if not path.is_absolute():
+            path = BASE_DIR / path
+
     sample_config = {
         'credentials_path': 'credentials.json',
         'sheet_mapping': {
@@ -431,7 +451,7 @@ def create_sample_config(path: str = "config.yaml"):
         'start_row': 2
     }
     
-    with open(path, 'w', encoding='utf-8') as f:
+    with open(str(path), 'w', encoding='utf-8') as f:
         yaml.dump(sample_config, f, allow_unicode=True, default_flow_style=False)
     
     print(f"Создан пример конфигурационного файла: {path}")
@@ -439,5 +459,6 @@ def create_sample_config(path: str = "config.yaml"):
 
 if __name__ == "__main__":
     # Создание примера конфигурации, если файл не существует
-    if not os.path.exists("config.yaml"):
-        create_sample_config()
+    default_config = BASE_DIR / "config.yaml"
+    if not default_config.exists():
+        create_sample_config(default_config)

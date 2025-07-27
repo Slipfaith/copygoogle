@@ -4,7 +4,7 @@ from typing import List, Tuple
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QTableWidget, QHeaderView, QComboBox,
     QTableWidgetItem, QSpinBox, QDialogButtonBox, QPushButton, QFrame,
-    QFileDialog
+    QFileDialog, QLineEdit
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QFont
@@ -328,7 +328,8 @@ class DropArea(QFrame):
         super().__init__()
         self.accept_multiple = accept_multiple
         self.setAcceptDrops(True)
-        self.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Sunken)
+        # Простая рамка без разделения на внутренние части
+        self.setFrameStyle(QFrame.NoFrame)
         self.setStyleSheet(
             """
             QFrame {

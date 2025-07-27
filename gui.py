@@ -21,6 +21,8 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPalette, QColor, QFont, 
 
 from excel_to_google_sheets import ExcelToGoogleSheets
 
+BASE_DIR = Path(__file__).resolve().parent
+
 
 class WorkerThread(QThread):
     """Поток для выполнения операций копирования"""
@@ -39,7 +41,7 @@ class WorkerThread(QThread):
     def run(self):
         try:
             # Создание процессора
-            self.processor = ExcelToGoogleSheets()
+            self.processor = ExcelToGoogleSheets(str(BASE_DIR / "config.yaml"))
             
             if self.mode == "single":
                 # Одиночный файл
@@ -604,7 +606,7 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.processor = ExcelToGoogleSheets()
+        self.processor = ExcelToGoogleSheets(str(BASE_DIR / "config.yaml"))
         self.worker_thread = None
         
         # Данные для разных режимов
@@ -896,17 +898,19 @@ class MainWindow(QMainWindow):
     
     def check_config(self):
         """Проверка наличия конфигурационного файла"""
-        if not os.path.exists("config.yaml"):
+        config_path = BASE_DIR / "config.yaml"
+        if not config_path.exists():
             self.log_message("⚠️ Файл config.yaml не найден. Создаю пример...")
             try:
                 from excel_to_google_sheets import create_sample_config
-                create_sample_config()
+                create_sample_config(config_path)
                 self.log_message("✓ Создан пример config.yaml")
             except Exception as e:
                 self.log_message(f"❌ Ошибка создания config.yaml: {e}")
-        
+
         # Проверка credentials.json
-        if not os.path.exists("credentials.json"):
+        creds_path = BASE_DIR / "credentials.json"
+        if not creds_path.exists():
             self.log_message("⚠️ Файл credentials.json не найден!")
             self.log_message("❗ Необходимо настроить Google Sheets API и получить credentials.json")
     

@@ -51,18 +51,34 @@ class ExcelToGoogleSheets:
         return logger
     
     def _load_config(self, config_path: str) -> Config:
-        """Загрузка конфигурации из YAML файла"""
+        """Загрузка конфигурации из YAML файла
+
+        Если файл отсутствует или пустой, возвращается конфигурация
+        по умолчанию. Это позволяет корректно инициализировать класс
+        даже при первом запуске, когда config.yaml еще не создан.
+        """
+        if not os.path.exists(config_path):
+            # Файл конфигурации отсутствует. Вернём значения по умолчанию.
+            return Config(
+                excel_path='',
+                google_sheet_id='',
+                credentials_path='',
+                sheet_mapping={},
+                column_mapping={'source': ['A'], 'target': ['A']},
+                start_row=1,
+            )
+
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f)
-                
+                data = yaml.safe_load(f) or {}
+
             return Config(
                 excel_path=data.get('excel_path', ''),
                 google_sheet_id=data.get('google_sheet_id', ''),
-                credentials_path=data['credentials_path'],
+                credentials_path=data.get('credentials_path', ''),
                 sheet_mapping=data.get('sheet_mapping', {}),
                 column_mapping=data.get('column_mapping', {'source': ['A'], 'target': ['A']}),
-                start_row=data.get('start_row', 1)
+                start_row=data.get('start_row', 1),
             )
         except Exception as e:
             raise Exception(f"Ошибка загрузки конфигурации: {e}")

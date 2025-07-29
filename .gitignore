@@ -50,3 +50,9 @@ pytest_cache/
 
 # Excel/Word temp
 ~$*
+
+# Text, JSON, YAML
+*.txt
+*.json
+*.yaml
+*.yml

@@ -4,7 +4,7 @@ from typing import List, Tuple
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QTableWidget, QHeaderView, QComboBox,
     QTableWidgetItem, QSpinBox, QDialogButtonBox, QPushButton, QFrame,
-    QFileDialog, QLineEdit
+    QFileDialog, QLineEdit, QWidget
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QFont
@@ -22,13 +22,36 @@ class BatchMappingDialog(QDialog):
         self.setWindowTitle("Настройка пакетного маппинга")
         self.setModal(True)
         self.setMinimumSize(800, 600)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #fafafa;
+            }
+            QLabel {
+                color: #424242;
+            }
+            QPushButton {
+                background-color: #e3f2fd;
+                color: #1976d2;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #bbdefb;
+            }
+            QPushButton:pressed {
+                background-color: #90caf9;
+            }
+        """)
         self.init_ui()
 
     def init_ui(self):
         layout = QVBoxLayout()
+        layout.setSpacing(15)
 
         info = QLabel("Настройте маппинг для каждого Excel файла:")
-        info.setStyleSheet("font-weight: bold; margin-bottom: 10px;")
+        info.setStyleSheet("font-weight: 600; color: #1976d2; margin-bottom: 10px;")
         layout.addWidget(info)
 
         self.mapping_table = QTableWidget()
@@ -37,6 +60,23 @@ class BatchMappingDialog(QDialog):
             "Excel файл", "Excel лист", "→", "Google лист",
             "Колонки (из → в)", "Начальная строка"
         ])
+        self.mapping_table.setStyleSheet("""
+            QTableWidget {
+                background-color: white;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+            }
+            QTableWidget::item {
+                padding: 5px;
+            }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                padding: 8px;
+                border: none;
+                font-weight: 600;
+                color: #616161;
+            }
+        """)
 
         header = self.mapping_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -70,6 +110,17 @@ class BatchMappingDialog(QDialog):
             google_combo = QComboBox()
             google_combo.addItem("-- Не копировать --")
             google_combo.addItems(self.google_sheets)
+            google_combo.setStyleSheet("""
+                QComboBox {
+                    border: 1px solid #e0e0e0;
+                    border-radius: 4px;
+                    padding: 4px;
+                    background-color: white;
+                }
+                QComboBox:hover {
+                    border-color: #90caf9;
+                }
+            """)
 
             file_name_without_ext = os.path.splitext(os.path.basename(excel_file))[0]
             for sheet in self.google_sheets:
@@ -85,12 +136,23 @@ class BatchMappingDialog(QDialog):
             start_row_spin.setMinimum(1)
             start_row_spin.setMaximum(10000)
             start_row_spin.setValue(1)
+            start_row_spin.setStyleSheet("""
+                QSpinBox {
+                    border: 1px solid #e0e0e0;
+                    border-radius: 4px;
+                    padding: 4px;
+                    background-color: white;
+                }
+                QSpinBox:hover {
+                    border-color: #90caf9;
+                }
+            """)
             self.mapping_table.setCellWidget(i, 5, start_row_spin)
 
         layout.addWidget(self.mapping_table)
 
         hint = QLabel("Формат колонок: 'A,B,C → D,E,F' или 'A-C → D-F'")
-        hint.setStyleSheet("color: #666; font-style: italic; margin-top: 5px;")
+        hint.setStyleSheet("color: #757575; font-style: italic; margin-top: 5px;")
         layout.addWidget(hint)
 
         quick_actions = QVBoxLayout()
@@ -109,6 +171,11 @@ class BatchMappingDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.validate_and_accept)
         buttons.rejected.connect(self.reject)
+        buttons.setStyleSheet("""
+            QDialogButtonBox QPushButton {
+                min-width: 80px;
+            }
+        """)
 
         layout.addWidget(buttons)
 
@@ -224,18 +291,67 @@ class MappingDialog(QDialog):
         self.setWindowTitle("Настройка маппинга")
         self.setModal(True)
         self.setMinimumWidth(600)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #fafafa;
+            }
+            QLabel {
+                color: #424242;
+            }
+            QLineEdit, QSpinBox {
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                padding: 8px;
+                background-color: white;
+            }
+            QLineEdit:focus, QSpinBox:focus {
+                border-color: #90caf9;
+            }
+            QPushButton {
+                background-color: #e3f2fd;
+                color: #1976d2;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #bbdefb;
+            }
+        """)
         self.init_ui()
 
     def init_ui(self):
         layout = QVBoxLayout()
+        layout.setSpacing(15)
 
         sheets_group = QFrame()
+        sheets_group.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 15px;
+            }
+        """)
         sheets_layout = QVBoxLayout()
 
         self.sheet_table = QTableWidget()
         self.sheet_table.setColumnCount(2)
         self.sheet_table.setHorizontalHeaderLabels(["Excel лист", "Google лист"])
         self.sheet_table.horizontalHeader().setStretchLastSection(True)
+        self.sheet_table.setStyleSheet("""
+            QTableWidget {
+                border: none;
+            }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                padding: 8px;
+                border: none;
+                font-weight: 600;
+                color: #616161;
+            }
+        """)
 
         self.sheet_table.setRowCount(len(self.excel_sheets))
         for i, excel_sheet in enumerate(self.excel_sheets):
@@ -246,6 +362,13 @@ class MappingDialog(QDialog):
             google_combo = QComboBox()
             google_combo.addItem("-- Не копировать --")
             google_combo.addItems(self.google_sheets)
+            google_combo.setStyleSheet("""
+                QComboBox {
+                    border: 1px solid #e0e0e0;
+                    border-radius: 4px;
+                    padding: 4px;
+                }
+            """)
             if excel_sheet in self.google_sheets:
                 google_combo.setCurrentText(excel_sheet)
             self.sheet_table.setCellWidget(i, 1, google_combo)
@@ -255,9 +378,18 @@ class MappingDialog(QDialog):
         layout.addWidget(sheets_group)
 
         columns_group = QFrame()
+        columns_group.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 15px;
+            }
+        """)
         columns_layout = QVBoxLayout()
 
         columns_info = QLabel("Укажите какие колонки копировать:")
+        columns_info.setStyleSheet("font-weight: 600; color: #1976d2; margin-bottom: 10px;")
         columns_layout.addWidget(columns_info)
 
         columns_input_layout = QVBoxLayout()
@@ -315,7 +447,7 @@ class MappingDialog(QDialog):
         }
 
 
-class DropArea(QFrame):
+class DropArea(QWidget):
     """Область для drag & drop файлов."""
 
     file_dropped = Signal(str)
@@ -325,51 +457,52 @@ class DropArea(QFrame):
         super().__init__()
         self.accept_multiple = accept_multiple
         self.setAcceptDrops(True)
-        # Простая рамка без разделения на внутренние части
-        self.setFrameStyle(QFrame.NoFrame)
+        self.setMinimumHeight(120)
         self.setStyleSheet(
             """
-            QFrame {
-                border: 2px dashed #aaa;
-                border-radius: 10px;
-                background-color: #f5f5f5;
-                min-height: 120px;
-            }
-            QFrame:hover {
-                background-color: #e8e8e8;
-                border-color: #666;
+            DropArea {
+                border: 2px dashed #e0e0e0;
+                border-radius: 12px;
+                background-color: #fafafa;
             }
             """
         )
 
         layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
 
+        # Иконка
+        icon_label = QLabel("📁")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet("font-size: 12px;")
+        layout.addWidget(icon_label)
+
+        # Основной текст
         if accept_multiple:
-            self.label = QLabel("📁 Перетащите Excel файлы сюда")
-            self.file_label = QLabel("можно выбрать несколько файлов")
+            self.label = QLabel("Перетащите Excel файлы сюда")
+            self.file_label = QLabel("или нажмите для выбора файлов")
         else:
-            self.label = QLabel("📁 Перетащите Excel файл сюда")
+            self.label = QLabel("Перетащите Excel файл сюда")
             self.file_label = QLabel("или нажмите для выбора файла")
 
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         font = QFont()
-        font.setPointSize(11)
+        font.setPointSize(12)
         self.label.setFont(font)
-        self.label.setStyleSheet("color: #666;")
+        self.label.setStyleSheet("color: #424242; font-weight: 500;")
 
         self.file_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.file_label.setStyleSheet("color: #999; font-size: 9pt;")
+        self.file_label.setStyleSheet("color: #757575; font-size: 10pt; margin-top: 5px;")
 
-        layout.addStretch()
         layout.addWidget(self.label)
         layout.addWidget(self.file_label)
-        layout.addStretch()
 
         self.setLayout(layout)
 
-    def mouseDoubleClickEvent(self, event):
-        self.open_file_dialog()
-        super().mouseDoubleClickEvent(event)
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.open_file_dialog()
+        super().mousePressEvent(event)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -379,11 +512,10 @@ class DropArea(QFrame):
                 event.acceptProposedAction()
                 self.setStyleSheet(
                     """
-                    QFrame {
-                        border: 2px solid #4CAF50;
-                        border-radius: 10px;
-                        background-color: #e8f5e9;
-                        min-height: 120px;
+                    DropArea {
+                        border: 2px solid #90caf9;
+                        border-radius: 12px;
+                        background-color: #e3f2fd;
                     }
                     """
                 )
@@ -391,11 +523,10 @@ class DropArea(QFrame):
     def dragLeaveEvent(self, event):
         self.setStyleSheet(
             """
-            QFrame {
-                border: 2px dashed #aaa;
-                border-radius: 10px;
-                background-color: #f5f5f5;
-                min-height: 120px;
+            DropArea {
+                border: 2px dashed #e0e0e0;
+                border-radius: 12px;
+                background-color: #fafafa;
             }
             """
         )
@@ -412,11 +543,10 @@ class DropArea(QFrame):
 
         self.setStyleSheet(
             """
-            QFrame {
-                border: 2px dashed #aaa;
-                border-radius: 10px;
-                background-color: #f5f5f5;
-                min-height: 120px;
+            DropArea {
+                border: 2px dashed #e0e0e0;
+                border-radius: 12px;
+                background-color: #fafafa;
             }
             """
         )
@@ -445,11 +575,13 @@ class DropArea(QFrame):
 
     def update_file_info(self, file_path: str):
         file_name = os.path.basename(file_path)
-        self.label.setText(f"📄 {file_name}")
+        self.label.setText(f"{file_name}")
+        self.label.setStyleSheet("color: #1976d2; font-weight: 500;")
         self.file_label.setText(f"Размер: {self._get_file_size(file_path)}")
 
     def update_files_info(self, files: List[str]):
-        self.label.setText(f"📄 Выбрано файлов: {len(files)}")
+        self.label.setText(f"Выбрано файлов: {len(files)}")
+        self.label.setStyleSheet("color: #1976d2; font-weight: 500;")
         total_size = sum(os.path.getsize(f) for f in files)
         self.file_label.setText(f"Общий размер: {self._format_size(total_size)}")
 
@@ -463,4 +595,3 @@ class DropArea(QFrame):
                 return f"{size:.1f} {unit}"
             size /= 1024.0
         return f"{size:.1f} TB"
-

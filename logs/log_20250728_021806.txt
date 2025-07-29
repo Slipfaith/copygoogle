@@ -1,0 +1,16 @@
+Начало обработки: 2025-07-28 02:18:06
+Excel файл: PZD localization-2.2.0-add-final_out.xlsx
+Google Таблица: https://docs.google.com/spreadsheets/d/178zaDq-vcUqojV3yCtyEIoA1xpKIIghxPqSylJpUXto/edit?gid=1375459829#gid=1375459829
+
+[02:18:06] Лог файл: E:\PythonProjects\copygoogle\logs\log_20250728_021806.txt
+[02:18:06] ==================================================
+[02:18:06] Начало обработки: 2025-07-28 02:18:06
+[02:18:06] Excel файл: PZD localization-2.2.0-add-final_out.xlsx
+[02:18:06] Google Таблица: https://docs.google.com/spreadsheets/d/178zaDq-vcUqojV3yCtyEIoA1xpKIIghxPqSylJpUXto/edit?gid=1375459829#gid=1375459829
+[02:18:06] ==================================================
+[02:18:06] Подключение к Google Таблицам...
+[02:18:07] Загрузка Excel файла...
+[02:18:07] Начало обработки листа: 2.2.0
+[02:19:31] Обновлено ячеек: 77
+[02:19:31] ✓ Лист '2.2.0' обработан. Скопировано строк: 77
+[02:19:31] ✓ Обработка завершена

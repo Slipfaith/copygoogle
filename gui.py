@@ -106,27 +106,52 @@ class MainWindow(QMainWindow):
         self.log_file_path = None
         
         self.init_ui()
-        
+
     def init_ui(self):
         self.setWindowTitle("Excel → Google Таблицы")
-        self.setMinimumSize(600, 500)
-        
+        self.setMinimumSize(650, 550)
+
+        # Установка общего стиля
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #ffffff;
+            }
+            QLabel {
+                color: #424242;
+            }
+            QGroupBox {
+                font-weight: 600;
+                color: #616161;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                background-color: white;
+            }
+        """)
+
         # Центральный виджет
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        
+
         # Основной layout
         layout = QVBoxLayout()
-        layout.setSpacing(10)
-        layout.setContentsMargins(20, 20, 20, 20)
-        
+        layout.setSpacing(15)
+        layout.setContentsMargins(25, 25, 25, 25)
+
         # Заголовок
-        title = QLabel("Копирование данных из Excel в Google Таблицы")
+        title = QLabel("Excel → Google Таблицы")
         title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font.setPointSize(18)
+        title_font.setWeight(QFont.Weight.Medium)
         title.setFont(title_font)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("color: #1976d2; margin-bottom: 10px;")
         layout.addWidget(title)
         
         # Поле для ввода ссылки на Google Таблицу
@@ -209,7 +234,7 @@ class MainWindow(QMainWindow):
                 font-weight: bold;
                 padding: 8px 16px;
                 border-radius: 5px;
-                font-size: 12pt;
+                font-size: 10pt;
             }
             QPushButton:hover {
                 background-color: #45a049;

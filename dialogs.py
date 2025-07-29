@@ -195,13 +195,13 @@ class BatchMappingDialog(QDialog):
         return source_cols, target_cols
 
     def parse_column_range(self, text: str) -> List[str]:
-        text = text.strip().upper()
-        if '-' in text and ',' not in text:
+        text = text.strip()
+        if '-' in text and ',' not in text and text.replace('-', '').isalpha():
             parts = text.split('-')
             if len(parts) != 2:
                 raise ValueError(f"Неверный диапазон: {text}")
-            start_col = parts[0].strip()
-            end_col = parts[1].strip()
+            start_col = parts[0].strip().upper()
+            end_col = parts[1].strip().upper()
             if not start_col.isalpha() or not end_col.isalpha():
                 raise ValueError(f"Неверные колонки: {text}")
             start_ord = ord(start_col)
@@ -210,10 +210,7 @@ class BatchMappingDialog(QDialog):
                 raise ValueError(f"Неверный диапазон: {text}")
             return [chr(i) for i in range(start_ord, end_ord + 1)]
         else:
-            cols = [col.strip() for col in text.split(',')]
-            for col in cols:
-                if not col.isalpha():
-                    raise ValueError(f"Неверная колонка: {col}")
+            cols = [col.strip() for col in text.split(',') if col.strip()]
             return cols
 
 

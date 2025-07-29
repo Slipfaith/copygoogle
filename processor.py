@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Callable
 
 import gspread
 import openpyxl
+from openpyxl.utils import get_column_letter
 from google.oauth2.service_account import Credentials
 
 from config import Config, load_config, BASE_DIR
@@ -109,6 +110,47 @@ class ExcelToGoogleSheets:
         except Exception as e:
             self.logger.error(f"Ошибка получения списка Google листов: {e}")
             return []
+
+    def _resolve_excel_columns(self, sheet, columns: List[str]) -> List[str]:
+        """Преобразование номеров или заголовков Excel в буквы столбцов."""
+        header_map = {str(cell.value).strip().lower(): cell.column_letter for cell in sheet[1] if cell.value is not None}
+        result = []
+        for col in columns:
+            col_str = str(col).strip()
+            if not col_str:
+                continue
+            if col_str.isdigit():
+                result.append(get_column_letter(int(col_str)))
+            elif col_str.isalpha():
+                result.append(col_str.upper())
+            else:
+                key = col_str.lower()
+                if key in header_map:
+                    result.append(header_map[key])
+                else:
+                    raise ValueError(f"Заголовок '{col}' не найден в Excel листе")
+        return result
+
+    def _resolve_google_columns(self, worksheet, columns: List[str]) -> List[str]:
+        """Преобразование номеров или заголовков Google в буквы столбцов."""
+        headers = worksheet.row_values(1)
+        header_map = {str(val).strip().lower(): get_column_letter(i + 1) for i, val in enumerate(headers) if val}
+        result = []
+        for col in columns:
+            col_str = str(col).strip()
+            if not col_str:
+                continue
+            if col_str.isdigit():
+                result.append(get_column_letter(int(col_str)))
+            elif col_str.isalpha():
+                result.append(col_str.upper())
+            else:
+                key = col_str.lower()
+                if key in header_map:
+                    result.append(header_map[key])
+                else:
+                    raise ValueError(f"Заголовок '{col}' не найден в Google листе")
+        return result
 
     def process_excel_file(
         self,
@@ -254,8 +296,8 @@ class ExcelToGoogleSheets:
             raise
 
     def _copy_sheet_data(self, excel_sheet, google_worksheet, log_callback=None) -> int:
-        source_cols = self.config.column_mapping['source']
-        target_cols = self.config.column_mapping['target']
+        source_cols = self._resolve_excel_columns(excel_sheet, self.config.column_mapping['source'])
+        target_cols = self._resolve_google_columns(google_worksheet, self.config.column_mapping['target'])
 
         if len(source_cols) != len(target_cols):
             raise ValueError("Количество исходных и целевых колонок должно совпадать")

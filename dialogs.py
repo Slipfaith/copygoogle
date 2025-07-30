@@ -21,27 +21,27 @@ class BatchMappingDialog(QDialog):
 
         self.setWindowTitle("Настройка пакетного маппинга")
         self.setModal(True)
-        self.setMinimumSize(800, 600)
+        self.setFixedSize(700, 500)
         self.setStyleSheet("""
             QDialog {
-                background-color: #fafafa;
+                background-color: #ffffff;
             }
             QLabel {
-                color: #424242;
+                color: #212529;
             }
             QPushButton {
-                background-color: #e3f2fd;
-                color: #1976d2;
+                background-color: #0066cc;
+                color: white;
                 border: none;
                 padding: 8px 16px;
-                border-radius: 6px;
+                border-radius: 4px;
                 font-weight: 500;
             }
             QPushButton:hover {
-                background-color: #bbdefb;
+                background-color: #0052a3;
             }
             QPushButton:pressed {
-                background-color: #90caf9;
+                background-color: #004080;
             }
         """)
         self.init_ui()
@@ -51,7 +51,7 @@ class BatchMappingDialog(QDialog):
         layout.setSpacing(15)
 
         info = QLabel("Настройте маппинг для каждого Excel файла:")
-        info.setStyleSheet("font-weight: 600; color: #1976d2; margin-bottom: 10px;")
+        info.setStyleSheet("font-weight: 600; color: #0066cc; margin-bottom: 5px;")
         layout.addWidget(info)
 
         self.mapping_table = QTableWidget()
@@ -63,18 +63,18 @@ class BatchMappingDialog(QDialog):
         self.mapping_table.setStyleSheet("""
             QTableWidget {
                 background-color: white;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
             }
             QTableWidget::item {
                 padding: 5px;
             }
             QHeaderView::section {
-                background-color: #f5f5f5;
+                background-color: #f8f9fa;
                 padding: 8px;
                 border: none;
                 font-weight: 600;
-                color: #616161;
+                color: #495057;
             }
         """)
 
@@ -290,33 +290,35 @@ class MappingDialog(QDialog):
         self.google_sheets = google_sheets
         self.setWindowTitle("Настройка маппинга")
         self.setModal(True)
-        self.setMinimumWidth(600)
+        self.setFixedSize(500, 400)
         self.setStyleSheet("""
             QDialog {
-                background-color: #fafafa;
+                background-color: #ffffff;
             }
             QLabel {
-                color: #424242;
+                color: #212529;
             }
             QLineEdit, QSpinBox {
-                border: 1px solid #e0e0e0;
+                border: 1px solid #ced4da;
                 border-radius: 4px;
                 padding: 8px;
                 background-color: white;
+                font-size: 13px;
             }
             QLineEdit:focus, QSpinBox:focus {
-                border-color: #90caf9;
+                border-color: #0066cc;
+                outline: none;
             }
             QPushButton {
-                background-color: #e3f2fd;
-                color: #1976d2;
+                background-color: #0066cc;
+                color: white;
                 border: none;
                 padding: 8px 16px;
-                border-radius: 6px;
+                border-radius: 4px;
                 font-weight: 500;
             }
             QPushButton:hover {
-                background-color: #bbdefb;
+                background-color: #0052a3;
             }
         """)
         self.init_ui()
@@ -474,7 +476,7 @@ class DropArea(QWidget):
         # Иконка
         icon_label = QLabel("📁")
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet("font-size: 12px;")
+        icon_label.setStyleSheet("font-size: 36px;")
         layout.addWidget(icon_label)
 
         # Основной текст

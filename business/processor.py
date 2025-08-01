@@ -8,7 +8,7 @@ import openpyxl
 from google.oauth2.service_account import Credentials
 
 from config import Config, load_config, BASE_DIR
-from logic.sheet_utils import copy_sheet_data
+from logic.sheet_utils import copy_sheet_data, clear_column_cache
 
 
 class ExcelToGoogleSheets:
@@ -94,7 +94,8 @@ class ExcelToGoogleSheets:
 
     def get_excel_sheets(self, excel_path: str) -> List[str]:
         try:
-            wb = openpyxl.load_workbook(excel_path, read_only=True)
+            # ОПТИМИЗАЦИЯ: используем read_only=True для быстрого чтения списка листов
+            wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
             sheets = wb.sheetnames
             wb.close()
             return sheets
@@ -112,17 +113,21 @@ class ExcelToGoogleSheets:
             return []
 
     def process_excel_file(
-        self,
-        excel_path: str,
-        progress_callback: Optional[Callable[[int, int, str], None]] = None,
-        log_callback: Optional[Callable[[str], None]] = None
+            self,
+            excel_path: str,
+            progress_callback: Optional[Callable[[int, int, str], None]] = None,
+            log_callback: Optional[Callable[[str], None]] = None
     ):
         try:
             if not os.path.exists(excel_path):
                 raise FileNotFoundError(f"Excel файл не найден: {excel_path}")
 
+            # Очищаем кэш колонок перед обработкой нового файла
+            clear_column_cache()
+
             self._log("Загрузка Excel файла...", log_callback)
-            wb = openpyxl.load_workbook(excel_path, read_only=True)
+            # ОПТИМИЗАЦИЯ: используем data_only=True для получения значений вместо формул
+            wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
 
             total_sheets = len(self.config.sheet_mapping)
             processed_sheets = 0
@@ -179,11 +184,11 @@ class ExcelToGoogleSheets:
             raise
 
     def process_multiple_excel_files(
-        self,
-        file_mappings: List[Dict],
-        google_sheet_url: str,
-        progress_callback: Optional[Callable[[int, int, str], None]] = None,
-        log_callback: Optional[Callable[[str], None]] = None
+            self,
+            file_mappings: List[Dict],
+            google_sheet_url: str,
+            progress_callback: Optional[Callable[[int, int, str], None]] = None,
+            log_callback: Optional[Callable[[str], None]] = None
     ):
         try:
             self._log("Подключение к Google Таблицам...", log_callback)
@@ -194,6 +199,9 @@ class ExcelToGoogleSheets:
 
             for mapping in file_mappings:
                 try:
+                    # Очищаем кэш перед каждым файлом
+                    clear_column_cache()
+
                     excel_path = mapping['excel_path']
                     excel_sheet_name = mapping.get('excel_sheet', 'Sheet1')
                     google_sheet_name = mapping['google_sheet']
@@ -210,7 +218,8 @@ class ExcelToGoogleSheets:
                             progress_callback(processed, total_mappings, os.path.basename(excel_path))
                         continue
 
-                    wb = openpyxl.load_workbook(excel_path, read_only=True)
+                    # ОПТИМИЗАЦИЯ: data_only=True, read_only=True
+                    wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
 
                     if excel_sheet_name not in wb.sheetnames:
                         if wb.sheetnames:
@@ -261,7 +270,6 @@ class ExcelToGoogleSheets:
         except Exception as e:
             self._log(f"❌ Критическая ошибка: {e}", log_callback)
             raise
-
 
     def _log(self, message: str, log_callback: Optional[Callable[[str], None]] = None):
         self.logger.info(message)

@@ -1,5 +1,6 @@
 from typing import List, Dict, Optional, Callable
 import logging
+import re
 
 import gspread
 from openpyxl.utils import get_column_letter, column_index_from_string
@@ -218,6 +219,10 @@ def convert_excel_formula_to_google(formula: str) -> str:
     converted_formula = formula
     for excel_func, google_func in replacements.items():
         converted_formula = converted_formula.replace(excel_func, google_func)
+
+    # Заменяем разделители аргументов и десятичные разделители
+    converted_formula = converted_formula.replace(';', ',')
+    converted_formula = re.sub(r"(\d),(?=\d)", r"\1.", converted_formula)
 
     return converted_formula
 

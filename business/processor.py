@@ -94,8 +94,8 @@ class ExcelToGoogleSheets:
 
     def get_excel_sheets(self, excel_path: str) -> List[str]:
         try:
-            # ОПТИМИЗАЦИЯ: используем read_only=True для быстрого чтения списка листов
-            wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
+            # Загружаем файл с доступом к формулам и форматированию
+            wb = openpyxl.load_workbook(excel_path, data_only=False)
             sheets = wb.sheetnames
             wb.close()
             return sheets
@@ -126,8 +126,8 @@ class ExcelToGoogleSheets:
             clear_column_cache()
 
             self._log("Загрузка Excel файла...", log_callback)
-            # ОПТИМИЗАЦИЯ: используем data_only=True для получения значений вместо формул
-            wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
+            # Загружаем с доступом к формулам и форматированию
+            wb = openpyxl.load_workbook(excel_path, data_only=False)
 
             total_sheets = len(self.config.sheet_mapping)
             processed_sheets = 0
@@ -218,8 +218,8 @@ class ExcelToGoogleSheets:
                             progress_callback(processed, total_mappings, os.path.basename(excel_path))
                         continue
 
-                    # ОПТИМИЗАЦИЯ: data_only=True, read_only=True
-                    wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
+                    # Загружаем файл с формулами и форматированием
+                    wb = openpyxl.load_workbook(excel_path, data_only=False)
 
                     if excel_sheet_name not in wb.sheetnames:
                         if wb.sheetnames:

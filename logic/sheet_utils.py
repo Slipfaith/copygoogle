@@ -82,19 +82,28 @@ def copy_sheet_data(
             log_callback("Нет данных для копирования")
         return 0
 
-    updates = []
-    for row_offset, row_data in enumerate(excel_data):
-        google_row = start_row + row_offset
-        for value, target_col in zip(row_data, target_cols):
-            cell_address = f"{target_col}{google_row}"
-            updates.append({'range': cell_address, 'values': [[value]]})
+    # Определяем диапазон обновления в Google Sheet
+    from openpyxl.utils import column_index_from_string
 
-    if updates:
-        batch_size = 1000
-        for i in range(0, len(updates), batch_size):
-            batch = updates[i:i + batch_size]
-            google_worksheet.batch_update(batch, value_input_option='USER_ENTERED')
-        if log_callback:
-            log_callback(f"Обновлено ячеек: {len(updates)}")
+    col_numbers = [column_index_from_string(col) for col in target_cols]
+    min_col = min(col_numbers)
+    max_col = max(col_numbers)
+    start_col_letter = get_column_letter(min_col)
+    end_col_letter = get_column_letter(max_col)
+    target_range = f"{start_col_letter}{start_row}:{end_col_letter}{start_row + len(excel_data) - 1}"
+
+    num_cols = max_col - min_col + 1
+    index_map = [column_index_from_string(col) - min_col for col in target_cols]
+
+    values = []
+    for row in excel_data:
+        row_values = [''] * num_cols
+        for value, idx in zip(row, index_map):
+            row_values[idx] = value
+        values.append(row_values)
+
+    google_worksheet.update(target_range, values, value_input_option='USER_ENTERED')
+    if log_callback:
+        log_callback(f"Обновлено ячеек: {len(excel_data) * len(target_cols)}")
 
     return len(excel_data)

@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal, QMimeData, QTimer, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPalette, QColor, QFont, QIcon
 
-from processor import ExcelToGoogleSheets
+from business.processor import ExcelToGoogleSheets
 from config import BASE_DIR, create_sample_config
 from dialogs import BatchMappingDialog, MappingDialog, DropArea
 

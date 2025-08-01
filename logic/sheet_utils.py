@@ -153,9 +153,8 @@ def get_cell_formatting(cell):
             if font_format:
                 formatting['textFormat'] = font_format
 
+        # Выравнивание должно быть на уровне ячейки, а не в textFormat
         if cell.alignment:
-            text_format = formatting.get('textFormat', {})
-
             if cell.alignment.horizontal:
                 alignment_map = {
                     'left': 'LEFT',
@@ -164,7 +163,7 @@ def get_cell_formatting(cell):
                 }
                 h_align = alignment_map.get(cell.alignment.horizontal)
                 if h_align:
-                    text_format['horizontalAlignment'] = h_align
+                    formatting['horizontalAlignment'] = h_align
 
             if cell.alignment.vertical:
                 v_alignment_map = {
@@ -174,10 +173,7 @@ def get_cell_formatting(cell):
                 }
                 v_align = v_alignment_map.get(cell.alignment.vertical)
                 if v_align:
-                    text_format['verticalAlignment'] = v_align
-
-            if text_format:
-                formatting['textFormat'] = text_format
+                    formatting['verticalAlignment'] = v_align
 
     except Exception as e:
         pass
@@ -223,8 +219,54 @@ def convert_excel_formula_to_google(formula: str) -> str:
     for excel_func, google_func in replacements.items():
         converted_formula = converted_formula.replace(excel_func, google_func)
 
-    print(f"КОНВЕРТАЦИЯ ФОРМУЛЫ: '{original_formula}' → '{converted_formula}'")
     return converted_formula
+
+
+def get_cell_formula_simple(cell):
+    """Упрощенное получение формулы из ячейки"""
+
+    # 1. Проверяем тип данных - если это формула
+    if hasattr(cell, 'data_type') and cell.data_type == 'f':
+        # Это точно формула, пробуем все способы получить её
+
+        # 1.1 Через атрибут value
+        if cell.value is not None:
+            val_str = str(cell.value)
+            if val_str and not val_str.startswith('='):
+                return '=' + val_str
+            elif val_str:
+                return val_str
+
+        # 1.2 Через внутренний атрибут _value
+        if hasattr(cell, '_value') and cell._value is not None:
+            val_str = str(cell._value)
+            if val_str and not val_str.startswith('='):
+                return '=' + val_str
+            elif val_str:
+                return val_str
+
+        # 1.3 Через атрибут f (бывает у некоторых формул)
+        if hasattr(cell, 'f') and cell.f is not None:
+            return '=' + str(cell.f) if not str(cell.f).startswith('=') else str(cell.f)
+
+        # 1.4 Через атрибут formula
+        if hasattr(cell, 'formula') and cell.formula is not None:
+            return '=' + str(cell.formula) if not str(cell.formula).startswith('=') else str(cell.formula)
+
+        # Если ничего не помогло, возвращаем заглушку
+        return "=FORMULA"
+
+    # 2. Проверяем значение напрямую
+    if cell.value is not None and isinstance(cell.value, str) and cell.value.startswith('='):
+        return cell.value
+
+    # 3. Проверяем внутренний _value
+    if hasattr(cell, '_value') and cell._value is not None:
+        val_str = str(cell._value)
+        if val_str.startswith('='):
+            return val_str
+
+    return None
 
 
 def copy_sheet_data(
@@ -232,7 +274,8 @@ def copy_sheet_data(
         google_worksheet,
         column_mapping: Dict[str, List[str]],
         start_row: int,
-        log_callback: Optional[Callable[[str], None]] = None
+        log_callback: Optional[Callable[[str], None]] = None,
+        excel_sheet_values=None
 ) -> int:
     if log_callback:
         log_callback("Подготовка данных...")
@@ -243,20 +286,42 @@ def copy_sheet_data(
     if len(source_cols) != len(target_cols):
         raise ValueError("Количество исходных и целевых колонок должно совпадать")
 
+    max_row = excel_sheet.max_row
+
     if log_callback:
         log_callback("Анализ видимых строк и данных Excel...")
+        log_callback(f"📊 Общее количество строк в листе: {max_row}")
+        log_callback(f"📊 Начинаем с строки: {start_row}")
+        log_callback(f"📊 Строк для проверки: {max_row - start_row + 1}")
 
-    max_row = excel_sheet.max_row
+        # Быстрая проверка на наличие формул
+        formulas_found = 0
+        for row in range(start_row, min(start_row + 50, max_row + 1)):
+            for col_letter in source_cols[:3]:  # Проверяем первые 3 колонки
+                test_cell = excel_sheet[f"{col_letter}{row}"]
+                if hasattr(test_cell, 'data_type') and test_cell.data_type == 'f':
+                    formulas_found += 1
+                    if formulas_found == 1:
+                        log_callback(f"🔍 Найдена ячейка с типом 'f' в {col_letter}{row}")
+                        log_callback(f"   value: {repr(test_cell.value)}")
+                        if hasattr(test_cell, '_value'):
+                            log_callback(f"   _value: {repr(test_cell._value)}")
+                        break
+            if formulas_found > 0:
+                break
+
     if max_row < start_row:
         if log_callback:
             log_callback("Нет данных для копирования")
         return 0
 
     visible_rows_with_data = []
+    skipped_rows = []  # Для отслеживания пропущенных строк
 
     for row_num in range(start_row, max_row + 1):
         row_dimension = excel_sheet.row_dimensions.get(row_num)
         if row_dimension and row_dimension.hidden:
+            skipped_rows.append((row_num, "скрытая строка"))
             continue
 
         has_data = False
@@ -264,42 +329,25 @@ def copy_sheet_data(
 
         for col_letter in source_cols:
             cell = excel_sheet[f"{col_letter}{row_num}"]
-            cell_value = cell.value
-            cell_formula = None
 
-            # ОТЛАДКА - выводим все что есть в ячейке
-            if log_callback and cell_value is not None:
-                debug_info = f"Ячейка {col_letter}{row_num}: value='{cell_value}', data_type='{getattr(cell, 'data_type', 'None')}'"
-                if hasattr(cell, 'internal_value'):
-                    debug_info += f", internal_value='{cell.internal_value}'"
-                if hasattr(cell, 'f'):
-                    debug_info += f", f='{cell.f}'"
-                log_callback(debug_info)
+            # Получаем формулу
+            cell_formula = get_cell_formula_simple(cell)
 
-            # Проверяем формулу через internal_value
-            if hasattr(cell, 'internal_value') and str(cell.internal_value).startswith('='):
-                cell_formula = str(cell.internal_value)
+            # Получаем значение ячейки
+            if excel_sheet_values is not None:
+                value_cell = excel_sheet_values[f"{col_letter}{row_num}"]
+                cell_value = value_cell.value
+            else:
+                cell_value = cell.value
+
+            # Проверяем есть ли РЕАЛЬНЫЕ данные (не пустые ячейки)
+            if cell_formula is not None:
                 has_data = True
                 if log_callback:
-                    log_callback(f"ФОРМУЛА найдена через internal_value: {cell_formula}")
-            # Если нет internal_value, проверяем обычное значение
-            elif cell_value and str(cell_value).startswith('='):
-                cell_formula = str(cell_value)
+                    log_callback(f"📐 Формула в {col_letter}{row_num}: {cell_formula}")
+            elif cell_value is not None and str(cell_value).strip() != "":
                 has_data = True
-                if log_callback:
-                    log_callback(f"ФОРМУЛА найдена через value: {cell_formula}")
-            # Проверяем data_type
-            elif hasattr(cell, 'data_type') and cell.data_type == 'f':
-                if hasattr(cell, 'f'):
-                    cell_formula = '=' + str(cell.f)
-                else:
-                    cell_formula = str(cell_value) if cell_value else None
-                if cell_formula:
-                    has_data = True
-                    if log_callback:
-                        log_callback(f"ФОРМУЛА найдена через data_type: {cell_formula}")
-            elif cell_value is not None:
-                has_data = True
+            # НЕ считаем пустые ячейки как данные!
 
             row_cells.append({
                 'cell': cell,
@@ -313,6 +361,16 @@ def copy_sheet_data(
                 'row_num': row_num,
                 'cells': row_cells
             })
+        else:
+            skipped_rows.append((row_num, "нет данных"))
+
+    # Выводим информацию о пропущенных строках
+    if skipped_rows and log_callback:
+        log_callback(f"⚠️ Пропущено строк: {len(skipped_rows)}")
+        for row_num, reason in skipped_rows[:10]:  # Показываем первые 10
+            log_callback(f"  - Строка {row_num}: {reason}")
+        if len(skipped_rows) > 10:
+            log_callback(f"  ... и еще {len(skipped_rows) - 10} строк")
 
     if not visible_rows_with_data:
         if log_callback:
@@ -320,7 +378,21 @@ def copy_sheet_data(
         return 0
 
     if log_callback:
-        log_callback(f"Найдено {len(visible_rows_with_data)} видимых строк с данными")
+        log_callback(f"✅ Найдено {len(visible_rows_with_data)} видимых строк с данными")
+        log_callback(
+            f"📈 Статистика: всего строк {max_row}, начало с {start_row}, найдено с данными {len(visible_rows_with_data)}")
+
+        # Подсчитываем строки с формулами
+        rows_with_formulas = 0
+        for row_data in visible_rows_with_data:
+            has_formula = any(cell['formula'] is not None for cell in row_data['cells'])
+            if has_formula:
+                rows_with_formulas += 1
+
+        if rows_with_formulas > 0:
+            log_callback(f"📐 Строк с формулами: {rows_with_formulas}")
+        else:
+            log_callback("⚠️ Не найдено ни одной строки с формулами!")
 
     values_to_update = []
     formats_to_apply = []
@@ -337,16 +409,19 @@ def copy_sheet_data(
             cell_formula = cell_data['formula']
             cell_formatting = cell_data['formatting']
 
+            # Приоритет отдаем формулам
             if cell_formula:
                 converted_formula = convert_excel_formula_to_google(cell_formula)
-                if log_callback:
-                    log_callback(
-                        f"→ ФОРМУЛА ОБРАБОТАНА: '{cell_formula}' → '{converted_formula}' (строка {current_google_row}, колонка {target_cols[j]})")
                 row_values.append(converted_formula)
+                if log_callback and current_google_row in [19, 31]:
+                    log_callback(
+                        f"✓ Записываем формулу в строку {current_google_row}, колонка {target_cols[j]}: {converted_formula}")
             else:
-                if log_callback and cell_value is not None:
-                    log_callback(f"→ ЗНАЧЕНИЕ: '{cell_value}' (строка {current_google_row}, колонка {target_cols[j]})")
-                row_values.append(cell_value if cell_value is not None else '')
+                # Если нет формулы, берем значение
+                if cell_value is not None:
+                    row_values.append(cell_value)
+                else:
+                    row_values.append('')
 
             if cell_formatting:
                 target_col_index = column_index_from_string(target_cols[j])
@@ -394,13 +469,7 @@ def copy_sheet_data(
         )
 
         if log_callback:
-            log_callback(f"✓ ДАННЫЕ ЗАПИСАНЫ в диапазон {target_range}")
-            for i, row in enumerate(formatted_values):
-                row_num = google_start_row + i
-                for j, val in enumerate(row):
-                    if val and str(val).startswith('='):
-                        col_letter = get_column_letter(min_col + j)
-                        log_callback(f"  ✓ ФОРМУЛА в {col_letter}{row_num}: {val}")
+            log_callback(f"✓ Данные записаны в диапазон {target_range}")
 
         if formats_to_apply:
             if log_callback:
@@ -433,17 +502,33 @@ def copy_sheet_data(
                     }
                     format_requests.append(format_request)
 
-                batch_size = 100
+                # Увеличиваем размер батча и добавляем задержку
+                batch_size = 500  # Увеличено с 100
+                import time
+
                 for i in range(0, len(format_requests), batch_size):
                     batch = format_requests[i:i + batch_size]
                     if batch:
-                        google_worksheet.spreadsheet.batch_update({
-                            'requests': batch
-                        })
+                        try:
+                            google_worksheet.spreadsheet.batch_update({
+                                'requests': batch
+                            })
 
-                        if log_callback:
-                            log_callback(
-                                f"Применено форматирование к {min(len(batch), len(format_requests) - i)} ячейкам")
+                            if log_callback:
+                                log_callback(
+                                    f"Применено форматирование к {min(len(batch), len(format_requests) - i)} ячейкам")
+
+                            # Задержка чтобы не превышать лимиты
+                            if i + batch_size < len(format_requests):
+                                time.sleep(1)  # 1 секунда между батчами
+
+                        except Exception as batch_error:
+                            if "Quota exceeded" in str(batch_error):
+                                if log_callback:
+                                    log_callback("⚠️ Достигнут лимит API, пропускаем оставшееся форматирование")
+                                break
+                            else:
+                                raise batch_error
 
             except Exception as e:
                 if log_callback:

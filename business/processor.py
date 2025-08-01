@@ -94,8 +94,7 @@ class ExcelToGoogleSheets:
 
     def get_excel_sheets(self, excel_path: str) -> List[str]:
         try:
-            # Загружаем файл с доступом к формулам и форматированию
-            wb = openpyxl.load_workbook(excel_path, data_only=False)
+            wb = openpyxl.load_workbook(excel_path, data_only=False, keep_vba=True, read_only=False)
             sheets = wb.sheetnames
             wb.close()
             return sheets

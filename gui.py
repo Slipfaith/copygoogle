@@ -1,5 +1,6 @@
 """
 GUI для приложения копирования данных из Excel в Google Таблицы
+ОБНОВЛЕННАЯ ВЕРСИЯ с улучшенными диалогами
 """
 
 import sys
@@ -21,6 +22,8 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPalette, QColor, QFont, 
 
 from processor import ExcelToGoogleSheets
 from config import BASE_DIR, create_sample_config
+
+# Импортируем обычные диалоги (НЕ improved_dialogs!)
 from dialogs import BatchMappingDialog, MappingDialog, DropArea
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -243,7 +246,7 @@ class MainWindow(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle("Excel to Google Sheets")
+        self.setWindowTitle("Excel to Google Sheets - Улучшенная версия")
         self.setFixedSize(500, 600)
 
         # Центральный виджет
@@ -273,7 +276,7 @@ class MainWindow(QMainWindow):
             color: #212529;
         """)
 
-        subtitle = QLabel("Быстрое копирование данных")
+        subtitle = QLabel("Улучшенное копирование данных")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle.setStyleSheet("""
             font-size: 14px;
@@ -295,7 +298,7 @@ class MainWindow(QMainWindow):
         url_layout = QVBoxLayout()
         url_layout.setContentsMargins(15, 15, 15, 15)
 
-        url_label = QLabel("Google Таблица")
+        url_label = QLabel("🔗 Google Таблица")
         url_label.setStyleSheet("""
             font-size: 12px;
             font-weight: 500;
@@ -363,11 +366,11 @@ class MainWindow(QMainWindow):
         single_layout.addLayout(drop_container)
 
         # Кнопки
-        self.single_mapping_btn = self.create_button("Настроить маппинг", "#6c757d", "#495057")
+        self.single_mapping_btn = self.create_button("⚙️ Настроить маппинг", "#6c757d", "#495057")
         self.single_mapping_btn.setEnabled(False)
         self.single_mapping_btn.clicked.connect(self.configure_single_mapping)
 
-        self.single_process_btn = self.create_button("Начать копирование", "#28a745", "#218838", primary=True)
+        self.single_process_btn = self.create_button("🚀 Начать копирование", "#28a745", "#218838", primary=True)
         self.single_process_btn.setEnabled(False)
         self.single_process_btn.clicked.connect(self.start_single_processing)
 
@@ -415,10 +418,10 @@ class MainWindow(QMainWindow):
         # Кнопки управления списком
         list_btns_layout = QHBoxLayout()
 
-        clear_btn = self.create_small_button("Очистить")
+        clear_btn = self.create_small_button("🗑️ Очистить")
         clear_btn.clicked.connect(self.clear_batch_files)
 
-        remove_btn = self.create_small_button("Удалить выбранные")
+        remove_btn = self.create_small_button("➖ Удалить выбранные")
         remove_btn.clicked.connect(self.remove_selected_files)
 
         list_btns_layout.addWidget(clear_btn)
@@ -427,11 +430,11 @@ class MainWindow(QMainWindow):
         batch_layout.addLayout(list_btns_layout)
 
         # Кнопки действий
-        self.batch_mapping_btn = self.create_button("Настроить маппинг", "#6c757d", "#495057")
+        self.batch_mapping_btn = self.create_button("⚙️ Настроить маппинг", "#6c757d", "#495057")
         self.batch_mapping_btn.setEnabled(False)
         self.batch_mapping_btn.clicked.connect(self.configure_batch_mapping)
 
-        self.batch_process_btn = self.create_button("Начать копирование", "#28a745", "#218838", primary=True)
+        self.batch_process_btn = self.create_button("🚀 Начать копирование", "#28a745", "#218838", primary=True)
         self.batch_process_btn.setEnabled(False)
         self.batch_process_btn.clicked.connect(self.start_batch_processing)
 
@@ -442,8 +445,8 @@ class MainWindow(QMainWindow):
         batch_tab.setLayout(batch_layout)
 
         # Добавляем вкладки
-        self.tabs.addTab(single_tab, "Один файл")
-        self.tabs.addTab(batch_tab, "Несколько файлов")
+        self.tabs.addTab(single_tab, "📄 Один файл")
+        self.tabs.addTab(batch_tab, "📁 Несколько файлов")
         layout.addWidget(self.tabs)
 
         # Прогресс
@@ -493,7 +496,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.log_text)
 
         # Кнопка показать/скрыть лог
-        self.toggle_log_btn = self.create_small_button("Показать журнал")
+        self.toggle_log_btn = self.create_small_button("📋 Показать журнал")
         self.toggle_log_btn.clicked.connect(self.toggle_log)
         layout.addWidget(self.toggle_log_btn)
 
@@ -575,10 +578,10 @@ class MainWindow(QMainWindow):
         """Переключение видимости журнала"""
         if self.log_text.isVisible():
             self.log_text.hide()
-            self.toggle_log_btn.setText("Показать журнал")
+            self.toggle_log_btn.setText("📋 Показать журнал")
         else:
             self.log_text.show()
-            self.toggle_log_btn.setText("Скрыть журнал")
+            self.toggle_log_btn.setText("📋 Скрыть журнал")
 
     def check_config(self):
         """Проверка наличия конфигурационного файла"""
@@ -622,26 +625,35 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            self.log_message("Получение информации...")
+            self.log_message("🔍 Анализ файла...")
 
             excel_sheets = self.processor.get_excel_sheets(self.single_file)
             if not excel_sheets:
                 raise Exception("Не удалось получить листы Excel")
 
+            self.log_message("🔗 Подключение к Google Таблицам...")
             self.processor.connect_to_google_sheets(self.google_url_input.text().strip())
             google_sheets = self.processor.get_google_sheets()
             if not google_sheets:
                 raise Exception("Не удалось получить листы Google")
 
+            self.log_message("⚙️ Открытие настроек...")
             dialog = MappingDialog(excel_sheets, google_sheets, self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.single_config = dialog.get_config()
-                self.log_message("✓ Маппинг настроен")
+                self.log_message("✅ Маппинг настроен успешно!")
                 self.check_ready_state()
 
         except Exception as e:
             self.log_message(f"❌ Ошибка: {e}")
-            QMessageBox.critical(self, "Ошибка", str(e))
+            QMessageBox.critical(
+                self,
+                "Ошибка настройки",
+                f"Произошла ошибка при настройке маппинга:\n\n{str(e)}\n\nПроверьте:\n"
+                "• Корректность ссылки на Google Таблицу\n"
+                "• Наличие файла credentials.json\n"
+                "• Доступ к интернету"
+            )
 
     def start_single_processing(self):
         """Запуск обработки одного файла"""
@@ -653,8 +665,9 @@ class MainWindow(QMainWindow):
         self.log_text.clear()
 
         header = [
-            f"Начало: {datetime.now().strftime('%H:%M:%S')}",
-            f"Файл: {os.path.basename(self.single_file)}"
+            f"🚀 Начало обработки: {datetime.now().strftime('%H:%M:%S')}",
+            f"📄 Файл: {os.path.basename(self.single_file)}",
+            f"🔗 Таблица: {self.google_url_input.text().strip()[:50]}..."
         ]
         self.open_log_file(header)
 
@@ -669,14 +682,19 @@ class MainWindow(QMainWindow):
 
     def on_batch_files_dropped(self, files: List[str]):
         """Обработка выбранных файлов"""
+        added_count = 0
         for file in files:
             if file not in self.batch_files:
                 self.batch_files.append(file)
-                self.files_list.addItem(os.path.basename(file))
+                item = QListWidgetItem(f"📄 {os.path.basename(file)}")
+                item.setData(Qt.ItemDataRole.UserRole, file)
+                self.files_list.addItem(item)
+                added_count += 1
 
         self.batch_mappings = []
         self.check_ready_state()
-        self.log_message(f"✓ Добавлено: {len(files)} файлов")
+        if added_count > 0:
+            self.log_message(f"✅ Добавлено файлов: {added_count}")
 
     def clear_batch_files(self):
         """Очистка списка файлов"""
@@ -685,19 +703,29 @@ class MainWindow(QMainWindow):
         self.files_list.clear()
         self.batch_drop_area.reset()
         self.check_ready_state()
+        self.log_message("🗑️ Список файлов очищен")
 
     def remove_selected_files(self):
         """Удаление выбранных файлов"""
-        for item in self.files_list.selectedItems():
-            row = self.files_list.row(item)
-            self.files_list.takeItem(row)
-            if row < len(self.batch_files):
-                self.batch_files.pop(row)
+        selected_items = self.files_list.selectedItems()
+        if not selected_items:
+            QMessageBox.information(self, "Внимание", "Выберите файлы для удаления")
+            return
+
+        removed_count = 0
+        for item in selected_items:
+            file_path = item.data(Qt.ItemDataRole.UserRole)
+            if file_path in self.batch_files:
+                self.batch_files.remove(file_path)
+                removed_count += 1
+            self.files_list.takeItem(self.files_list.row(item))
 
         self.batch_mappings = []
         if not self.batch_files:
             self.batch_drop_area.reset()
         self.check_ready_state()
+        if removed_count > 0:
+            self.log_message(f"➖ Удалено файлов: {removed_count}")
 
     def configure_batch_mapping(self):
         """Настройка маппинга для пакетной обработки"""
@@ -705,22 +733,30 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            self.log_message("Подключение...")
+            self.log_message("🔗 Подключение к Google Таблицам...")
 
             self.processor.connect_to_google_sheets(self.google_url_input.text().strip())
             google_sheets = self.processor.get_google_sheets()
             if not google_sheets:
                 raise Exception("Не удалось получить листы Google")
 
+            self.log_message("⚙️ Открытие настроек пакетного маппинга...")
             dialog = BatchMappingDialog(self.batch_files, google_sheets, self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.batch_mappings = dialog.mappings
-                self.log_message(f"✓ Настроено: {len(self.batch_mappings)} файлов")
+                self.log_message(f"✅ Настроено маппинг для {len(self.batch_mappings)} файлов")
                 self.check_ready_state()
 
         except Exception as e:
             self.log_message(f"❌ Ошибка: {e}")
-            QMessageBox.critical(self, "Ошибка", str(e))
+            QMessageBox.critical(
+                self,
+                "Ошибка настройки",
+                f"Произошла ошибка при настройке маппинга:\n\n{str(e)}\n\nПроверьте:\n"
+                "• Корректность ссылки на Google Таблицу\n"
+                "• Наличие файла credentials.json\n"
+                "• Доступ к интернету"
+            )
 
     def start_batch_processing(self):
         """Запуск пакетной обработки"""
@@ -732,8 +768,9 @@ class MainWindow(QMainWindow):
         self.log_text.clear()
 
         header = [
-            f"Начало: {datetime.now().strftime('%H:%M:%S')}",
-            f"Файлов: {len(self.batch_mappings)}"
+            f"🚀 Начало пакетной обработки: {datetime.now().strftime('%H:%M:%S')}",
+            f"📁 Файлов к обработке: {len(self.batch_mappings)}",
+            f"🔗 Таблица: {self.google_url_input.text().strip()[:50]}..."
         ]
         self.open_log_file(header)
 
@@ -799,57 +836,76 @@ class MainWindow(QMainWindow):
 
     def update_progress(self, current: int, total: int, item_name: str):
         """Обновление прогресса"""
-        progress = int((current / total) * 100)
+        progress = int((current / total) * 100) if total > 0 else 0
         self.progress_bar.setValue(progress)
 
         if self.tabs.currentIndex() == 0:
             self.progress_bar.setFormat(f"{progress}% - {item_name}")
-            self.status_label.setText(f"Листов: {current}/{total}")
+            self.status_label.setText(f"📋 Листов: {current}/{total}")
         else:
             self.progress_bar.setFormat(f"{progress}% - {item_name}")
-            self.status_label.setText(f"Файлов: {current}/{total}")
+            self.status_label.setText(f"📁 Файлов: {current}/{total}")
 
     def log_message(self, message: str):
         """Добавление сообщения в лог"""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        self.log_text.append(f"[{timestamp}] {message}")
+        formatted_message = f"[{timestamp}] {message}"
+        self.log_text.append(formatted_message)
 
         if self.log_file:
-            self.log_file.write(f"[{timestamp}] {message}\n")
+            self.log_file.write(formatted_message + "\n")
+            self.log_file.flush()
 
+        # Автопрокрутка к концу
         scrollbar = self.log_text.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
     def on_processing_finished(self):
         """Успешное завершение"""
         self.progress_bar.setValue(100)
-        self.progress_bar.setFormat("✓ Готово")
-        self.status_label.setText("Завершено успешно")
+        self.progress_bar.setFormat("✅ Готово!")
+        self.status_label.setText("🎉 Завершено успешно")
 
         self.close_log_file()
-        self.log_message("✓ Обработка завершена")
+        self.log_message("🎉 Обработка завершена успешно!")
 
         QTimer.singleShot(3000, self.hide_progress)
         self.enable_ui()
 
-        QMessageBox.information(
-            self,
-            "Успешно",
-            "Данные успешно скопированы!"
+        # Красивое уведомление об успехе
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Успешно!")
+        msg.setText("🎉 Данные успешно скопированы!")
+        msg.setInformativeText(
+            f"Все данные были успешно перенесены в Google Таблицы.\n"
+            f"Лог сохранен в: {self.log_file_path.name if self.log_file_path else 'неизвестно'}"
         )
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.exec()
 
     def on_processing_error(self, error_message: str):
         """Обработка ошибки"""
-        self.log_message(f"❌ ОШИБКА: {error_message}")
+        self.log_message(f"💥 КРИТИЧЕСКАЯ ОШИБКА: {error_message}")
         self.hide_progress()
         self.close_log_file()
         self.enable_ui()
 
-        QMessageBox.critical(
-            self,
-            "Ошибка",
-            f"Произошла ошибка:\n\n{error_message}"
+        # Подробное сообщение об ошибке
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Ошибка обработки")
+        msg.setText("💥 Произошла ошибка при обработке")
+        msg.setInformativeText(
+            f"Детали ошибки:\n{error_message}\n\n"
+            "Возможные причины:\n"
+            "• Нет доступа к интернету\n"
+            "• Неверные права доступа к Google Таблице\n"
+            "• Поврежденный Excel файл\n"
+            "• Неверная настройка credentials.json"
         )
+        msg.setIcon(QMessageBox.Icon.Critical)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.exec()
 
 
 def main():

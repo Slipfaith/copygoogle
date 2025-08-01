@@ -2,10 +2,11 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, List, Optional, Callable
+import time
 
 import gspread
 import openpyxl
-from openpyxl.utils import get_column_letter
+from openpyxl.utils import get_column_letter, column_index_from_string
 from google.oauth2.service_account import Credentials
 
 from config import Config, load_config, BASE_DIR
@@ -113,50 +114,113 @@ class ExcelToGoogleSheets:
 
     def _resolve_excel_columns(self, sheet, columns: List[str]) -> List[str]:
         """Преобразование номеров или заголовков Excel в буквы столбцов."""
-        header_map = {str(cell.value).strip().lower(): cell.column_letter for cell in sheet[1] if cell.value is not None}
         result = []
+
         for col in columns:
             col_str = str(col).strip()
             if not col_str:
                 continue
+
+            # Проверяем диапазон вида A-Z
+            if '-' in col_str and self._is_column_range(col_str):
+                range_cols = self._expand_column_range(col_str)
+                result.extend(range_cols)
+                continue
+
+            # Проверяем числовой номер колонки
             if col_str.isdigit():
                 result.append(get_column_letter(int(col_str)))
-            elif col_str.isalpha():
+                continue
+
+            # Проверяем букву колонки
+            if col_str.isalpha() and len(col_str) <= 2:  # A, B, AA, AB и т.д.
                 result.append(col_str.upper())
-            else:
-                key = col_str.lower()
-                if key in header_map:
-                    result.append(header_map[key])
-                else:
-                    raise ValueError(f"Заголовок '{col}' не найден в Excel листе")
+                continue
+
+            # Ищем по заголовку (только если это не похоже на диапазон колонок)
+            header_map = {str(cell.value).strip().lower(): cell.column_letter
+                          for cell in sheet[1] if cell.value is not None}
+            key = col_str.lower()
+            if key in header_map:
+                result.append(header_map[key])
+                continue
+
+            # Если ничего не найдено
+            raise ValueError(f"Колонка '{col}' не найдена")
+
         return result
+
+    def _is_column_range(self, text: str) -> bool:
+        """Проверяет, является ли текст диапазоном колонок типа A-Z"""
+        if '-' not in text:
+            return False
+        parts = text.split('-')
+        if len(parts) != 2:
+            return False
+        start, end = parts[0].strip(), parts[1].strip()
+        # Проверяем что обе части - это буквы колонок
+        return (start.isalpha() and end.isalpha() and
+                len(start) <= 2 and len(end) <= 2)
+
+    def _expand_column_range(self, range_text: str) -> List[str]:
+        """Расширяет диапазон колонок A-Z в список [A, B, C, ..., Z]"""
+        parts = range_text.split('-')
+        start_col = parts[0].strip().upper()
+        end_col = parts[1].strip().upper()
+
+        # Поддерживаем как одинарные (A-Z), так и двойные буквы (AA-AB)
+        start_num = column_index_from_string(start_col)
+        end_num = column_index_from_string(end_col)
+
+        if start_num <= end_num:
+            return [get_column_letter(i) for i in range(start_num, end_num + 1)]
+
+        raise ValueError(f"Неверный диапазон колонок: {range_text}")
 
     def _resolve_google_columns(self, worksheet, columns: List[str]) -> List[str]:
         """Преобразование номеров или заголовков Google в буквы столбцов."""
-        headers = worksheet.row_values(1)
-        header_map = {str(val).strip().lower(): get_column_letter(i + 1) for i, val in enumerate(headers) if val}
         result = []
+
         for col in columns:
             col_str = str(col).strip()
             if not col_str:
                 continue
+
+            # Проверяем диапазон вида A-Z
+            if '-' in col_str and self._is_column_range(col_str):
+                range_cols = self._expand_column_range(col_str)
+                result.extend(range_cols)
+                continue
+
+            # Проверяем числовой номер колонки
             if col_str.isdigit():
                 result.append(get_column_letter(int(col_str)))
-            elif col_str.isalpha():
+                continue
+
+            # Проверяем букву колонки
+            if col_str.isalpha() and len(col_str) <= 2:
                 result.append(col_str.upper())
-            else:
-                key = col_str.lower()
-                if key in header_map:
-                    result.append(header_map[key])
-                else:
-                    raise ValueError(f"Заголовок '{col}' не найден в Google листе")
+                continue
+
+            # Ищем по заголовку
+            headers = worksheet.row_values(1)
+            header_map = {str(val).strip().lower(): get_column_letter(i + 1)
+                          for i, val in enumerate(headers) if val}
+            key = col_str.lower()
+            if key in header_map:
+                result.append(header_map[key])
+                continue
+
+            # Если ничего не найдено
+            raise ValueError(f"Колонка '{col}' не найдена в Google листе")
+
         return result
 
     def process_excel_file(
-        self,
-        excel_path: str,
-        progress_callback: Optional[Callable[[int, int, str], None]] = None,
-        log_callback: Optional[Callable[[str], None]] = None
+            self,
+            excel_path: str,
+            progress_callback: Optional[Callable[[int, int, str], None]] = None,
+            log_callback: Optional[Callable[[str], None]] = None
     ):
         try:
             if not os.path.exists(excel_path):
@@ -190,7 +254,7 @@ class ExcelToGoogleSheets:
                             progress_callback(processed_sheets, total_sheets, excel_sheet_name)
                         continue
 
-                    rows_copied = self._copy_sheet_data(
+                    rows_copied = self._copy_sheet_data_fast(
                         excel_sheet,
                         google_worksheet,
                         log_callback
@@ -218,11 +282,11 @@ class ExcelToGoogleSheets:
             raise
 
     def process_multiple_excel_files(
-        self,
-        file_mappings: List[Dict],
-        google_sheet_url: str,
-        progress_callback: Optional[Callable[[int, int, str], None]] = None,
-        log_callback: Optional[Callable[[str], None]] = None
+            self,
+            file_mappings: List[Dict],
+            google_sheet_url: str,
+            progress_callback: Optional[Callable[[int, int, str], None]] = None,
+            log_callback: Optional[Callable[[str], None]] = None
     ):
         try:
             self._log("Подключение к Google Таблицам...", log_callback)
@@ -278,7 +342,7 @@ class ExcelToGoogleSheets:
                     self.config.column_mapping = mapping.get('column_mapping', {'source': ['A'], 'target': ['A']})
                     self.config.start_row = mapping.get('start_row', 1)
 
-                    rows_copied = self._copy_sheet_data(excel_sheet, google_worksheet, log_callback)
+                    rows_copied = self._copy_sheet_data_fast(excel_sheet, google_worksheet, log_callback)
 
                     self._log(f"✓ Скопировано строк: {rows_copied}", log_callback)
 
@@ -295,15 +359,23 @@ class ExcelToGoogleSheets:
             self._log(f"❌ Критическая ошибка: {e}", log_callback)
             raise
 
-    def _copy_sheet_data(self, excel_sheet, google_worksheet, log_callback=None) -> int:
+    def _copy_sheet_data_fast(self, excel_sheet, google_worksheet, log_callback=None) -> int:
+        """🚀 БЫСТРОЕ копирование данных - массовая загрузка одним запросом"""
+        start_time = time.time()
+
         source_cols = self._resolve_excel_columns(excel_sheet, self.config.column_mapping['source'])
         target_cols = self._resolve_google_columns(google_worksheet, self.config.column_mapping['target'])
 
         if len(source_cols) != len(target_cols):
             raise ValueError("Количество исходных и целевых колонок должно совпадать")
 
+        self._log(f"📊 Обработка колонок: {source_cols} → {target_cols}", log_callback)
+
+        # Собираем ВСЕ данные в один большой массив
         excel_data = []
         max_row = excel_sheet.max_row
+
+        self._log(f"📖 Чтение {max_row - self.config.start_row + 1} строк...", log_callback)
 
         for row_idx in range(self.config.start_row, max_row + 1):
             row_data = []
@@ -313,31 +385,77 @@ class ExcelToGoogleSheets:
                 cell_value = excel_sheet[f"{source_col}{row_idx}"].value
                 if cell_value is not None:
                     has_data = True
-                row_data.append(cell_value if cell_value is not None else '')
+                # Конвертируем None в пустую строку для Google Sheets
+                row_data.append(str(cell_value) if cell_value is not None else '')
 
             if has_data:
                 excel_data.append(row_data)
 
         if not excel_data:
-            self._log("Нет данных для копирования", log_callback)
+            self._log("⚠️ Нет данных для копирования", log_callback)
             return 0
 
-        updates = []
-        for row_offset, row_data in enumerate(excel_data):
-            google_row = self.config.start_row + row_offset
-            for value, target_col in zip(row_data, target_cols):
-                cell_address = f"{target_col}{google_row}"
-                updates.append({'range': cell_address, 'values': [[value]]})
+        self._log(f"📤 Загрузка {len(excel_data)} строк в Google Sheets...", log_callback)
 
-        if updates:
+        # МАССОВАЯ ЗАГРУЗКА ОДНИМ ЗАПРОСОМ! 🚀
+        try:
+            # Определяем диапазон для вставки
+            start_col = target_cols[0]
+            end_col = target_cols[-1]
+            start_row = self.config.start_row
+            end_row = start_row + len(excel_data) - 1
+
+            range_name = f"{start_col}{start_row}:{end_col}{end_row}"
+
+            self._log(f"🎯 Диапазон загрузки: {range_name}", log_callback)
+
+            # Одним махом загружаем ВСЕ данные!
+            google_worksheet.update(
+                range_name,
+                excel_data,
+                value_input_option='USER_ENTERED'
+            )
+
+            elapsed = time.time() - start_time
+            self._log(f"⚡ Загрузка завершена за {elapsed:.2f} сек!", log_callback)
+
+        except Exception as e:
+            self._log(f"❌ Ошибка при массовой загрузке: {e}", log_callback)
+
+            # Fallback: если массовая загрузка не сработала, используем старый метод
+            self._log("🔄 Переключение на порционную загрузку...", log_callback)
+            return self._copy_sheet_data_chunked(excel_data, target_cols, google_worksheet, log_callback)
+
+        return len(excel_data)
+
+    def _copy_sheet_data_chunked(self, excel_data, target_cols, google_worksheet, log_callback=None) -> int:
+        """📦 Порционная загрузка данных (fallback метод)"""
+
+        chunk_size = 100  # Загружаем по 100 строк за раз
+        total_chunks = (len(excel_data) + chunk_size - 1) // chunk_size
+
+        for chunk_idx in range(0, len(excel_data), chunk_size):
+            chunk_data = excel_data[chunk_idx:chunk_idx + chunk_size]
+
+            start_col = target_cols[0]
+            end_col = target_cols[-1]
+            start_row = self.config.start_row + chunk_idx
+            end_row = start_row + len(chunk_data) - 1
+
+            range_name = f"{start_col}{start_row}:{end_col}{end_row}"
+
             try:
-                batch_size = 1000
-                for i in range(0, len(updates), batch_size):
-                    batch = updates[i:i + batch_size]
-                    google_worksheet.batch_update(batch, value_input_option='USER_ENTERED')
-                self._log(f"Обновлено ячеек: {len(updates)}", log_callback)
+                google_worksheet.update(
+                    range_name,
+                    chunk_data,
+                    value_input_option='USER_ENTERED'
+                )
+
+                current_chunk = (chunk_idx // chunk_size) + 1
+                self._log(f"📦 Chunk {current_chunk}/{total_chunks} загружен", log_callback)
+
             except Exception as e:
-                self._log(f"Ошибка при обновлении данных: {e}", log_callback)
+                self._log(f"❌ Ошибка загрузки chunk {current_chunk}: {e}", log_callback)
                 raise
 
         return len(excel_data)

@@ -1,32 +1,46 @@
 from typing import List, Dict, Optional, Callable
 
 import gspread
-from openpyxl.utils import get_column_letter
+from openpyxl.utils import get_column_letter, column_index_from_string
 
 
 def resolve_excel_columns(sheet, columns: List[str]) -> List[str]:
-    """Преобразование номеров или заголовков Excel в буквы столбцов."""
+    """Преобразование номеров, заголовков или диапазонов Excel в буквы столбцов."""
     header_map = {str(cell.value).strip().lower(): cell.column_letter for cell in sheet[1] if cell.value is not None}
     result: List[str] = []
     for col in columns:
         col_str = str(col).strip()
         if not col_str:
             continue
-        if col_str.isdigit():
-            result.append(get_column_letter(int(col_str)))
-        elif col_str.isalpha():
-            result.append(col_str.upper())
+
+        # Поддержка диапазонов вида "A-D" или "1-4"
+        for delim in ("-", ":"):
+            if delim in col_str:
+                start, end = col_str.split(delim, 1)
+                start_letter = resolve_excel_columns(sheet, [start])[0]
+                end_letter = resolve_excel_columns(sheet, [end])[0]
+                start_idx = column_index_from_string(start_letter)
+                end_idx = column_index_from_string(end_letter)
+                step = 1 if end_idx >= start_idx else -1
+                for idx in range(start_idx, end_idx + step, step):
+                    result.append(get_column_letter(idx))
+                break
         else:
-            key = col_str.lower()
-            if key in header_map:
-                result.append(header_map[key])
+            if col_str.isdigit():
+                result.append(get_column_letter(int(col_str)))
+            elif col_str.isalpha():
+                result.append(col_str.upper())
             else:
-                raise ValueError(f"Заголовок '{col}' не найден в Excel листе")
+                key = col_str.lower()
+                if key in header_map:
+                    result.append(header_map[key])
+                else:
+                    raise ValueError(f"Заголовок '{col}' не найден в Excel листе")
     return result
 
 
 def resolve_google_columns(worksheet, columns: List[str]) -> List[str]:
-    """Преобразование номеров или заголовков Google в буквы столбцов."""
+    """Преобразование номеров, заголовков или диапазонов Google в буквы столбцов."""
     headers = worksheet.row_values(1)
     header_map = {str(val).strip().lower(): get_column_letter(i + 1) for i, val in enumerate(headers) if val}
     result: List[str] = []
@@ -34,16 +48,30 @@ def resolve_google_columns(worksheet, columns: List[str]) -> List[str]:
         col_str = str(col).strip()
         if not col_str:
             continue
-        if col_str.isdigit():
-            result.append(get_column_letter(int(col_str)))
-        elif col_str.isalpha():
-            result.append(col_str.upper())
+
+        # Поддержка диапазонов вида "A-D" или "1-4"
+        for delim in ("-", ":"):
+            if delim in col_str:
+                start, end = col_str.split(delim, 1)
+                start_letter = resolve_google_columns(worksheet, [start])[0]
+                end_letter = resolve_google_columns(worksheet, [end])[0]
+                start_idx = column_index_from_string(start_letter)
+                end_idx = column_index_from_string(end_letter)
+                step = 1 if end_idx >= start_idx else -1
+                for idx in range(start_idx, end_idx + step, step):
+                    result.append(get_column_letter(idx))
+                break
         else:
-            key = col_str.lower()
-            if key in header_map:
-                result.append(header_map[key])
+            if col_str.isdigit():
+                result.append(get_column_letter(int(col_str)))
+            elif col_str.isalpha():
+                result.append(col_str.upper())
             else:
-                raise ValueError(f"Заголовок '{col}' не найден в Google листе")
+                key = col_str.lower()
+                if key in header_map:
+                    result.append(header_map[key])
+                else:
+                    raise ValueError(f"Заголовок '{col}' не найден в Google листе")
     return result
 
 

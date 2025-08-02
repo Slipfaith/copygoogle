@@ -23,13 +23,27 @@ def debug_excel_formulas(excel_path: str, sheet_name: str = None):
     wb_values = openpyxl.load_workbook(excel_path, data_only=True, read_only=True)
 
     # Выбираем лист
-    if sheet_name and sheet_name in wb_formulas.sheetnames:
-        sheet_f = wb_formulas[sheet_name]
-        sheet_v = wb_values[sheet_name]
+    if sheet_name:
+        if sheet_name in wb_formulas.sheetnames:
+            sheet_f = wb_formulas[sheet_name]
+        else:
+            print(f"⚠️ Лист '{sheet_name}' не найден в книге с формулами. Используется активный лист.")
+            sheet_f = wb_formulas.active
+            sheet_name = sheet_f.title
+
+        if sheet_name in wb_values.sheetnames:
+            sheet_v = wb_values[sheet_name]
+        else:
+            print(f"⚠️ Лист '{sheet_name}' не найден в книге со значениями. Кешированные результаты формул недоступны.")
+            sheet_v = None
     else:
         sheet_f = wb_formulas.active
-        sheet_v = wb_values.active
         sheet_name = sheet_f.title
+        if sheet_name in wb_values.sheetnames:
+            sheet_v = wb_values[sheet_name]
+        else:
+            print(f"⚠️ Лист '{sheet_name}' не найден в книге со значениями. Кешированные результаты формул недоступны.")
+            sheet_v = None
 
     print(f"\nАнализируем лист: {sheet_name}")
     print(f"Максимальная строка: {sheet_f.max_row}")
@@ -49,7 +63,7 @@ def debug_excel_formulas(excel_path: str, sheet_name: str = None):
     for row in range(1, min(sheet_f.max_row + 1, 200)):
         for col in range(1, sheet_f.max_column + 1):
             cell_f = sheet_f.cell(row=row, column=col)
-            cell_v = sheet_v.cell(row=row, column=col)
+            cell_v = sheet_v.cell(row=row, column=col) if sheet_v else None
 
             total_cells += 1
 
@@ -62,14 +76,20 @@ def debug_excel_formulas(excel_path: str, sheet_name: str = None):
 
                 # Выводим первые 10 найденных формул
                 if len(formulas_found) <= 10:
+                    value_repr = cell_v.value if cell_v else None
                     print(f"ФОРМУЛА НАЙДЕНА в {formula_info['coordinate']}:")
                     print(f"  - Формула: {formula_info['formula']}")
-                    print(f"  - Значение (из values): {cell_v.value}")
+                    print(f"  - Значение (из values): {value_repr}")
                     print(f"  - Тип данных: {formula_info['data_type']}")
                     print(f"  - Способ обнаружения: {formula_info['detection_method']}")
+                    if cell_v is None or value_repr is None:
+                        print("  - ⚠️ Кешированное значение отсутствует")
                     print()
 
-            if cell_f.value is not None:
+            # Считаем ячейки с данными
+            if cell_v is not None and cell_v.value is not None:
+                cells_with_values += 1
+            elif cell_v is None and cell_f.value is not None:
                 cells_with_values += 1
 
     # Итоговая статистика

@@ -285,6 +285,8 @@ def copy_sheet_data(
 
     if log_callback:
         log_callback("Подготовка данных...")
+        if excel_sheet_values is None:
+            log_callback("⚠️ Закешированные значения формул недоступны. Будут использованы только формулы из Excel.")
 
     source_cols = resolve_excel_columns(excel_sheet, column_mapping['source'])
     target_cols = resolve_google_columns(google_worksheet, column_mapping['target'])
@@ -324,6 +326,7 @@ def copy_sheet_data(
     rows_data = []
     skipped_rows = []  # Для отчета о пропущенных строках
     rows_with_values = 0
+    missing_formula_cache = 0
 
     for row_num in range(start_row, max_row + 1):
         row_dimension = excel_sheet.row_dimensions.get(row_num)
@@ -344,6 +347,8 @@ def copy_sheet_data(
             if excel_sheet_values is not None:
                 value_cell = excel_sheet_values[f"{col_letter}{row_num}"]
                 cell_value = value_cell.value
+                if cell_formula is not None and cell_value is None:
+                    missing_formula_cache += 1
             else:
                 cell_value = formula_cell.value
 
@@ -363,11 +368,10 @@ def copy_sheet_data(
 
         if has_data:
             rows_with_values += 1
+            rows_data.append(row_cells)
         else:
             reason = "скрытая строка" if is_hidden else "нет данных"
             skipped_rows.append((row_num, reason))
-
-        rows_data.append({'row_num': row_num, 'cells': row_cells})
 
     # Выводим информацию о пропущенных строках
     if skipped_rows and log_callback:
@@ -383,8 +387,8 @@ def copy_sheet_data(
             f"📈 Статистика: всего строк {max_row}, начало с {start_row}, найдено с данными {rows_with_values}")
 
         rows_with_formulas = 0
-        for row_data in rows_data:
-            if any(cell['formula'] is not None for cell in row_data['cells']):
+        for row_cells in rows_data:
+            if any(cell['formula'] is not None for cell in row_cells):
                 rows_with_formulas += 1
 
         if rows_with_formulas > 0:
@@ -392,15 +396,21 @@ def copy_sheet_data(
         else:
             log_callback("⚠️ Не найдено ни одной строки с формулами!")
 
+        if missing_formula_cache > 0:
+            log_callback(
+                f"⚠️ Для {missing_formula_cache} формул отсутствуют закешированные значения. "
+                "Файл должен быть пересчитан и сохранён в Excel, иначе в Google Sheets будут вставлены только формулы."
+            )
+
     values_to_update = []
     formats_to_apply = []
 
-    for row_data in rows_data:
-        current_google_row = row_data['row_num']
+    for idx, row_cells in enumerate(rows_data):
+        current_google_row = start_row + idx
         row_values = []
         row_formats = []
 
-        for j, cell_data in enumerate(row_data['cells']):
+        for j, cell_data in enumerate(row_cells):
             cell_value = cell_data['value']
             cell_formula = cell_data['formula']
             cell_formatting = cell_data['formatting']
@@ -424,6 +434,11 @@ def copy_sheet_data(
 
         values_to_update.append(row_values)
         formats_to_apply.extend(row_formats)
+
+    if not values_to_update:
+        if log_callback:
+            log_callback("Нет данных для записи в Google Sheets")
+        return 0
 
     if log_callback:
         log_callback(f"Подготовлено {len(values_to_update)} строк для записи")

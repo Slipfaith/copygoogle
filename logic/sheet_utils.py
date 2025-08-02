@@ -296,6 +296,29 @@ def copy_sheet_data(
 
     max_row = excel_sheet.max_row
 
+    # Определяем последнюю строку, содержащую данные или формулы,
+    # чтобы не обрабатывать длинный хвост пустых строк.
+    last_data_row = start_row - 1
+    values_sheet = excel_sheet_values if excel_sheet_values is not None else excel_sheet
+    for row in range(max_row, start_row - 1, -1):
+        row_has_data = False
+        for col_letter in source_cols:
+            formula_cell = excel_sheet[f"{col_letter}{row}"]
+            cell_formula = get_cell_formula_simple(formula_cell)
+            value_cell = values_sheet[f"{col_letter}{row}"]
+            cell_value = value_cell.value
+            if cell_formula is not None or (cell_value is not None and str(cell_value).strip() != ""):
+                row_has_data = True
+                break
+        if row_has_data:
+            last_data_row = row
+            break
+
+    if last_data_row > 0 and last_data_row < max_row:
+        if log_callback:
+            log_callback(f"🧹 Пропущено {max_row - last_data_row} пустых строк в конце листа")
+        max_row = last_data_row
+
     if log_callback:
         log_callback("Анализ видимых строк и данных Excel...")
         log_callback(f"📊 Общее количество строк в листе: {max_row}")

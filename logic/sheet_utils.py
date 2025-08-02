@@ -223,39 +223,34 @@ def convert_excel_formula_to_google(formula: str) -> str:
 
 
 def get_cell_formula_simple(cell):
-    """Try to extract Excel formula from an openpyxl cell.
+    """Try to extract an Excel formula from an ``openpyxl`` cell.
 
-    Openpyxl stores formulas in different attributes depending on how the
-    workbook was loaded.  This helper checks multiple locations to reliably
-    detect formulas.  If a formula is found, it is returned with a leading
-    '=' so it can be written to Google Sheets unchanged.  If no formula is
-    present, ``None`` is returned.
+    Different versions of ``openpyxl`` may store the original formula in
+    various attributes.  The previous implementation manually checked a few
+    of them which still missed some cases (for example when ``cell.formula``
+    is an object rather than a string).  As a result the application treated
+    such cells as empty which caused rows containing formulas to be skipped
+    and subsequently shifted in Google Sheets.
+
+    This version iterates over all known attributes that may contain a
+    formula and normalises the result to a string starting with ``=``.  If a
+    formula is detected but its text cannot be retrieved, a placeholder is
+    returned so that the row is still considered to contain data.
     """
 
-    # Most reliable: value already contains the formula string
-    value = getattr(cell, "value", None)
-    if isinstance(value, str) and value.startswith("="):
-        return value
+    for attr in ("value", "_value", "formula", "_formula"):
+        val = getattr(cell, attr, None)
+        if not val:
+            continue
+        # ``cell.formula`` may be a specialised object; convert to string
+        val_str = str(val)
+        if val_str.startswith("="):
+            return val_str
+        if attr in {"formula", "_formula"}:
+            return f"={val_str}"
 
-    # Some workbooks keep the raw formula in a private attribute
-    raw = getattr(cell, "_value", None)
-    if isinstance(raw, str) and raw.startswith("="):
-        return raw
-
-    # When ``data_type`` is 'f' the cell definitely has a formula. Try to
-    # retrieve it from dedicated attributes used by openpyxl.
     if getattr(cell, "data_type", None) == "f":
-        formula_attr = None
-        if getattr(cell, "formula", None):
-            formula_attr = cell.formula
-        elif getattr(cell, "_formula", None):
-            formula_attr = cell._formula
-
-        if formula_attr:
-            formula_str = str(formula_attr)
-            return formula_str if formula_str.startswith("=") else f"={formula_str}"
-
-        # Formula exists but openpyxl cannot read its text
+        # Formula exists but ``openpyxl`` couldn't expose its text
         return "=FORMULA_EXISTS_BUT_CANNOT_READ"
 
     return None
@@ -307,14 +302,13 @@ def copy_sheet_data(
             log_callback("Нет данных для копирования")
         return 0
 
-    visible_rows_with_data = []
-    skipped_rows = []  # Для отслеживания пропущенных строк
+    rows_data = []
+    skipped_rows = []  # Для отчета о пропущенных строках
+    rows_with_values = 0
 
     for row_num in range(start_row, max_row + 1):
         row_dimension = excel_sheet.row_dimensions.get(row_num)
-        if row_dimension and row_dimension.hidden:
-            skipped_rows.append((row_num, "скрытая строка"))
-            continue
+        is_hidden = bool(row_dimension and row_dimension.hidden)
 
         has_data = False
         row_cells = []
@@ -339,7 +333,6 @@ def copy_sheet_data(
                     log_callback(f"📐 Формула в {col_letter}{row_num}: {cell_formula}")
             elif cell_value is not None and str(cell_value).strip() != "":
                 has_data = True
-            # НЕ считаем пустые ячейки как данные!
 
             row_cells.append({
                 'cell': cell,
@@ -349,12 +342,12 @@ def copy_sheet_data(
             })
 
         if has_data:
-            visible_rows_with_data.append({
-                'row_num': row_num,
-                'cells': row_cells
-            })
+            rows_with_values += 1
         else:
-            skipped_rows.append((row_num, "нет данных"))
+            reason = "скрытая строка" if is_hidden else "нет данных"
+            skipped_rows.append((row_num, reason))
+
+        rows_data.append({'row_num': row_num, 'cells': row_cells})
 
     # Выводим информацию о пропущенных строках
     if skipped_rows and log_callback:
@@ -364,21 +357,14 @@ def copy_sheet_data(
         if len(skipped_rows) > 10:
             log_callback(f"  ... и еще {len(skipped_rows) - 10} строк")
 
-    if not visible_rows_with_data:
-        if log_callback:
-            log_callback("Нет видимых строк с данными для копирования")
-        return 0
-
     if log_callback:
-        log_callback(f"✅ Найдено {len(visible_rows_with_data)} видимых строк с данными")
+        log_callback(f"✅ Найдено {rows_with_values} строк с данными")
         log_callback(
-            f"📈 Статистика: всего строк {max_row}, начало с {start_row}, найдено с данными {len(visible_rows_with_data)}")
+            f"📈 Статистика: всего строк {max_row}, начало с {start_row}, найдено с данными {rows_with_values}")
 
-        # Подсчитываем строки с формулами
         rows_with_formulas = 0
-        for row_data in visible_rows_with_data:
-            has_formula = any(cell['formula'] is not None for cell in row_data['cells'])
-            if has_formula:
+        for row_data in rows_data:
+            if any(cell['formula'] is not None for cell in row_data['cells']):
                 rows_with_formulas += 1
 
         if rows_with_formulas > 0:
@@ -389,10 +375,8 @@ def copy_sheet_data(
     values_to_update = []
     formats_to_apply = []
 
-    google_start_row = start_row
-
-    for i, row_data in enumerate(visible_rows_with_data):
-        current_google_row = google_start_row + i
+    for row_data in rows_data:
+        current_google_row = row_data['row_num']
         row_values = []
         row_formats = []
 
@@ -401,7 +385,6 @@ def copy_sheet_data(
             cell_formula = cell_data['formula']
             cell_formatting = cell_data['formatting']
 
-            # Приоритет отдаем формулам
             if cell_formula:
                 converted_formula = convert_excel_formula_to_google(cell_formula)
                 row_values.append(converted_formula)
@@ -409,11 +392,7 @@ def copy_sheet_data(
                     log_callback(
                         f"✓ Записываем формулу в строку {current_google_row}, колонка {target_cols[j]}: {converted_formula}")
             else:
-                # Если нет формулы, берем значение
-                if cell_value is not None:
-                    row_values.append(cell_value)
-                else:
-                    row_values.append('')
+                row_values.append(cell_value if cell_value is not None else '')
 
             if cell_formatting:
                 target_col_index = column_index_from_string(target_cols[j])
@@ -428,8 +407,6 @@ def copy_sheet_data(
 
     if log_callback:
         log_callback(f"Подготовлено {len(values_to_update)} строк для записи")
-
-    if log_callback:
         log_callback("Запись данных в Google Sheets...")
 
     try:
@@ -438,8 +415,8 @@ def copy_sheet_data(
         max_col = max(col_numbers)
         start_col_letter = get_column_letter(min_col)
         end_col_letter = get_column_letter(max_col)
-        end_row = google_start_row + len(values_to_update) - 1
-        target_range = f"{start_col_letter}{google_start_row}:{end_col_letter}{end_row}"
+        end_row = start_row + len(values_to_update) - 1
+        target_range = f"{start_col_letter}{start_row}:{end_col_letter}{end_row}"
 
         num_cols = max_col - min_col + 1
         index_map = [column_index_from_string(col) - min_col for col in target_cols]
@@ -494,7 +471,6 @@ def copy_sheet_data(
                     }
                     format_requests.append(format_request)
 
-                # Увеличиваем размер батча и добавляем задержку
                 batch_size = 500  # Увеличено с 100
                 import time
 
@@ -510,7 +486,6 @@ def copy_sheet_data(
                                 log_callback(
                                     f"Применено форматирование к {min(len(batch), len(format_requests) - i)} ячейкам")
 
-                            # Задержка чтобы не превышать лимиты
                             if i + batch_size < len(format_requests):
                                 time.sleep(1)  # 1 секунда между батчами
 
@@ -531,7 +506,7 @@ def copy_sheet_data(
             if formats_to_apply:
                 log_callback(f"✓ Применено форматирование к {len(formats_to_apply)} ячейкам")
 
-        return len(values_to_update)
+        return rows_with_values
 
     except Exception as e:
         if log_callback:

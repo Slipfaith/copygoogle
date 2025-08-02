@@ -1,6 +1,5 @@
 from typing import List, Dict, Optional, Callable
 import logging
-import re
 
 import gspread
 from openpyxl.utils import get_column_letter, column_index_from_string
@@ -220,57 +219,10 @@ def convert_excel_formula_to_google(formula: str) -> str:
     for excel_func, google_func in replacements.items():
         converted_formula = converted_formula.replace(excel_func, google_func)
 
-    # Заменяем разделители аргументов и десятичные разделители
-    converted_formula = converted_formula.replace(';', ',')
-    converted_formula = re.sub(r"(\d),(?=\d)", r"\1.", converted_formula)
-
     return converted_formula
 
 
 def get_cell_formula_simple(cell):
-    """Упрощенное получение формулы из ячейки"""
-
-    # 1. Проверяем тип данных - если это формула
-    if hasattr(cell, 'data_type') and cell.data_type == 'f':
-        # Это точно формула, пробуем все способы получить её
-
-        # 1.1 Через атрибут value
-        if cell.value is not None:
-            val_str = str(cell.value)
-            if val_str and not val_str.startswith('='):
-                return '=' + val_str
-            elif val_str:
-                return val_str
-
-        # 1.2 Через внутренний атрибут _value
-        if hasattr(cell, '_value') and cell._value is not None:
-            val_str = str(cell._value)
-            if val_str and not val_str.startswith('='):
-                return '=' + val_str
-            elif val_str:
-                return val_str
-
-        # 1.3 Через атрибут f (бывает у некоторых формул)
-        if hasattr(cell, 'f') and cell.f is not None:
-            return '=' + str(cell.f) if not str(cell.f).startswith('=') else str(cell.f)
-
-        # 1.4 Через атрибут formula
-        if hasattr(cell, 'formula') and cell.formula is not None:
-            return '=' + str(cell.formula) if not str(cell.formula).startswith('=') else str(cell.formula)
-
-        # Если ничего не помогло, возвращаем заглушку
-        return "=FORMULA"
-
-    # 2. Проверяем значение напрямую
-    if cell.value is not None and isinstance(cell.value, str) and cell.value.startswith('='):
-        return cell.value
-
-    # 3. Проверяем внутренний _value
-    if hasattr(cell, '_value') and cell._value is not None:
-        val_str = str(cell._value)
-        if val_str.startswith('='):
-            return val_str
-
     return None
 
 

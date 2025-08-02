@@ -125,8 +125,13 @@ class ExcelToGoogleSheets:
             clear_column_cache()
 
             self._log("Загрузка Excel файла...", log_callback)
-            # Загружаем с доступом к формулам и форматированию
-            wb = openpyxl.load_workbook(excel_path, data_only=False)
+            # Загружаем две версии книги: с формулами и с закешированными значениями
+            wb_formulas = openpyxl.load_workbook(excel_path, data_only=False)
+            wb_values = openpyxl.load_workbook(excel_path, data_only=True)
+            self._log(
+                "Примечание: openpyxl не вычисляет формулы. Значения берутся из последнего сохранения файла.",
+                log_callback
+            )
 
             total_sheets = len(self.config.sheet_mapping)
             processed_sheets = 0
@@ -135,14 +140,21 @@ class ExcelToGoogleSheets:
                 try:
                     self._log(f"Начало обработки листа: {excel_sheet_name}", log_callback)
 
-                    if excel_sheet_name not in wb.sheetnames:
+                    if excel_sheet_name not in wb_formulas.sheetnames:
                         self._log(f"⚠️ Лист '{excel_sheet_name}' не найден в Excel файле", log_callback)
                         processed_sheets += 1
                         if progress_callback:
                             progress_callback(processed_sheets, total_sheets, excel_sheet_name)
                         continue
-
-                    excel_sheet = wb[excel_sheet_name]
+                    excel_sheet = wb_formulas[excel_sheet_name]
+                    excel_sheet_values = None
+                    if excel_sheet_name in wb_values.sheetnames:
+                        excel_sheet_values = wb_values[excel_sheet_name]
+                    else:
+                        self._log(
+                            f"⚠️ Лист '{excel_sheet_name}' отсутствует в книге значений (data_only=True). Формулы будут вставлены без вычисленных значений",
+                            log_callback
+                        )
 
                     try:
                         google_worksheet = self.google_sheet.worksheet(google_sheet_name)
@@ -158,7 +170,8 @@ class ExcelToGoogleSheets:
                         google_worksheet,
                         self.config.column_mapping,
                         self.config.start_row,
-                        log_callback
+                        log_callback,
+                        excel_sheet_values=excel_sheet_values
                     )
 
                     self._log(
@@ -176,7 +189,8 @@ class ExcelToGoogleSheets:
                     if progress_callback:
                         progress_callback(processed_sheets, total_sheets, excel_sheet_name)
 
-            wb.close()
+            wb_formulas.close()
+            wb_values.close()
             self._log("✓ Обработка завершена", log_callback)
         except Exception as e:
             self._log(f"❌ Критическая ошибка: {e}", log_callback)
@@ -217,28 +231,43 @@ class ExcelToGoogleSheets:
                             progress_callback(processed, total_mappings, os.path.basename(excel_path))
                         continue
 
-                    # Загружаем файл с формулами и форматированием
-                    wb = openpyxl.load_workbook(excel_path, data_only=False)
+                    # Загружаем две версии книги: с формулами и со значениями
+                    wb_formulas = openpyxl.load_workbook(excel_path, data_only=False)
+                    wb_values = openpyxl.load_workbook(excel_path, data_only=True)
+                    self._log(
+                        "Примечание: openpyxl не вычисляет формулы. Значения берутся из последнего сохранения файла.",
+                        log_callback
+                    )
 
-                    if excel_sheet_name not in wb.sheetnames:
-                        if wb.sheetnames:
-                            excel_sheet_name = wb.sheetnames[0]
+                    if excel_sheet_name not in wb_formulas.sheetnames:
+                        if wb_formulas.sheetnames:
+                            excel_sheet_name = wb_formulas.sheetnames[0]
                             self._log(f"Используется лист: {excel_sheet_name}", log_callback)
                         else:
                             self._log(f"⚠️ В файле нет листов", log_callback)
-                            wb.close()
+                            wb_formulas.close()
+                            wb_values.close()
                             processed += 1
                             if progress_callback:
                                 progress_callback(processed, total_mappings, os.path.basename(excel_path))
                             continue
 
-                    excel_sheet = wb[excel_sheet_name]
+                    excel_sheet = wb_formulas[excel_sheet_name]
+                    excel_sheet_values = None
+                    if excel_sheet_name in wb_values.sheetnames:
+                        excel_sheet_values = wb_values[excel_sheet_name]
+                    else:
+                        self._log(
+                            f"⚠️ Лист '{excel_sheet_name}' отсутствует в книге значений (data_only=True). Формулы будут вставлены без вычисленных значений",
+                            log_callback
+                        )
 
                     try:
                         google_worksheet = self.google_sheet.worksheet(google_sheet_name)
                     except gspread.exceptions.WorksheetNotFound:
                         self._log(f"⚠️ Лист '{google_sheet_name}' не найден в Google Таблицах", log_callback)
-                        wb.close()
+                        wb_formulas.close()
+                        wb_values.close()
                         processed += 1
                         if progress_callback:
                             progress_callback(processed, total_mappings, os.path.basename(excel_path))
@@ -252,12 +281,14 @@ class ExcelToGoogleSheets:
                         google_worksheet,
                         self.config.column_mapping,
                         self.config.start_row,
-                        log_callback
+                        log_callback,
+                        excel_sheet_values=excel_sheet_values
                     )
 
                     self._log(f"✓ Скопировано строк: {rows_copied}", log_callback)
 
-                    wb.close()
+                    wb_formulas.close()
+                    wb_values.close()
                 except Exception as e:
                     self._log(f"❌ Ошибка при обработке {mapping.get('excel_path', 'unknown')}: {e}", log_callback)
 

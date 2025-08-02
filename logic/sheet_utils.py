@@ -285,6 +285,8 @@ def copy_sheet_data(
 
     if log_callback:
         log_callback("Подготовка данных...")
+        if excel_sheet_values is None:
+            log_callback("⚠️ Закешированные значения формул недоступны. Будут использованы только формулы из Excel.")
 
     source_cols = resolve_excel_columns(excel_sheet, column_mapping['source'])
     target_cols = resolve_google_columns(google_worksheet, column_mapping['target'])
@@ -324,6 +326,7 @@ def copy_sheet_data(
     rows_data = []
     skipped_rows = []  # Для отчета о пропущенных строках
     rows_with_values = 0
+    missing_formula_cache = 0
 
     for row_num in range(start_row, max_row + 1):
         row_dimension = excel_sheet.row_dimensions.get(row_num)
@@ -344,6 +347,8 @@ def copy_sheet_data(
             if excel_sheet_values is not None:
                 value_cell = excel_sheet_values[f"{col_letter}{row_num}"]
                 cell_value = value_cell.value
+                if cell_formula is not None and cell_value is None:
+                    missing_formula_cache += 1
             else:
                 cell_value = formula_cell.value
 
@@ -391,6 +396,12 @@ def copy_sheet_data(
             log_callback(f"📐 Строк с формулами: {rows_with_formulas}")
         else:
             log_callback("⚠️ Не найдено ни одной строки с формулами!")
+
+        if missing_formula_cache > 0:
+            log_callback(
+                f"⚠️ Для {missing_formula_cache} формул отсутствуют закешированные значения. "
+                "Файл должен быть пересчитан и сохранён в Excel, иначе в Google Sheets будут вставлены только формулы."
+            )
 
     values_to_update = []
     formats_to_apply = []

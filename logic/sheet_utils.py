@@ -223,6 +223,41 @@ def convert_excel_formula_to_google(formula: str) -> str:
 
 
 def get_cell_formula_simple(cell):
+    """Try to extract Excel formula from an openpyxl cell.
+
+    Openpyxl stores formulas in different attributes depending on how the
+    workbook was loaded.  This helper checks multiple locations to reliably
+    detect formulas.  If a formula is found, it is returned with a leading
+    '=' so it can be written to Google Sheets unchanged.  If no formula is
+    present, ``None`` is returned.
+    """
+
+    # Most reliable: value already contains the formula string
+    value = getattr(cell, "value", None)
+    if isinstance(value, str) and value.startswith("="):
+        return value
+
+    # Some workbooks keep the raw formula in a private attribute
+    raw = getattr(cell, "_value", None)
+    if isinstance(raw, str) and raw.startswith("="):
+        return raw
+
+    # When ``data_type`` is 'f' the cell definitely has a formula. Try to
+    # retrieve it from dedicated attributes used by openpyxl.
+    if getattr(cell, "data_type", None) == "f":
+        formula_attr = None
+        if getattr(cell, "formula", None):
+            formula_attr = cell.formula
+        elif getattr(cell, "_formula", None):
+            formula_attr = cell._formula
+
+        if formula_attr:
+            formula_str = str(formula_attr)
+            return formula_str if formula_str.startswith("=") else f"={formula_str}"
+
+        # Formula exists but openpyxl cannot read its text
+        return "=FORMULA_EXISTS_BUT_CANNOT_READ"
+
     return None
 
 

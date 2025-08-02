@@ -264,6 +264,25 @@ def copy_sheet_data(
         log_callback: Optional[Callable[[str], None]] = None,
         excel_sheet_values=None
 ) -> int:
+    """Copy data from an Excel sheet to a Google worksheet.
+
+    Parameters
+    ----------
+    excel_sheet: ``openpyxl`` worksheet loaded with ``data_only=False`` so
+        formula objects are preserved.  Passing a sheet from a workbook loaded
+        with ``data_only=True`` would strip formulas which in turn breaks
+        detection logic.  The function explicitly checks this to avoid
+        mistakes.
+    excel_sheet_values: optional worksheet from the same workbook loaded with
+        ``data_only=True`` used only for retrieving calculated values.
+    """
+
+    # Ensure the worksheets come from the expected workbooks
+    if getattr(excel_sheet.parent, "data_only", False):
+        raise ValueError("excel_sheet must come from a workbook loaded with data_only=False")
+    if excel_sheet_values is not None and not getattr(excel_sheet_values.parent, "data_only", False):
+        raise ValueError("excel_sheet_values must come from a workbook loaded with data_only=True")
+
     if log_callback:
         log_callback("Подготовка данных...")
 
@@ -285,14 +304,14 @@ def copy_sheet_data(
         formulas_found = 0
         for row in range(start_row, min(start_row + 50, max_row + 1)):
             for col_letter in source_cols[:3]:  # Проверяем первые 3 колонки
-                test_cell = excel_sheet[f"{col_letter}{row}"]
-                if hasattr(test_cell, 'data_type') and test_cell.data_type == 'f':
+                formula_cell = excel_sheet[f"{col_letter}{row}"]
+                if hasattr(formula_cell, 'data_type') and formula_cell.data_type == 'f':
                     formulas_found += 1
                     if formulas_found == 1:
                         log_callback(f"🔍 Найдена ячейка с типом 'f' в {col_letter}{row}")
-                        log_callback(f"   value: {repr(test_cell.value)}")
-                        if hasattr(test_cell, '_value'):
-                            log_callback(f"   _value: {repr(test_cell._value)}")
+                        log_callback(f"   value: {repr(formula_cell.value)}")
+                        if hasattr(formula_cell, '_value'):
+                            log_callback(f"   _value: {repr(formula_cell._value)}")
                         break
             if formulas_found > 0:
                 break
@@ -314,17 +333,19 @@ def copy_sheet_data(
         row_cells = []
 
         for col_letter in source_cols:
-            cell = excel_sheet[f"{col_letter}{row_num}"]
+            # Always take cells from the ``data_only=False`` sheet so that
+            # formula objects are available.
+            formula_cell = excel_sheet[f"{col_letter}{row_num}"]
 
             # Получаем формулу
-            cell_formula = get_cell_formula_simple(cell)
+            cell_formula = get_cell_formula_simple(formula_cell)
 
-            # Получаем значение ячейки
+            # Получаем значение ячейки (может быть из ``data_only=True`` книги)
             if excel_sheet_values is not None:
                 value_cell = excel_sheet_values[f"{col_letter}{row_num}"]
                 cell_value = value_cell.value
             else:
-                cell_value = cell.value
+                cell_value = formula_cell.value
 
             # Проверяем есть ли РЕАЛЬНЫЕ данные (не пустые ячейки)
             if cell_formula is not None:
@@ -335,10 +356,9 @@ def copy_sheet_data(
                 has_data = True
 
             row_cells.append({
-                'cell': cell,
                 'value': cell_value,
                 'formula': cell_formula,
-                'formatting': get_cell_formatting(cell)
+                'formatting': get_cell_formatting(formula_cell)
             })
 
         if has_data:

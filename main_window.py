@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QTabWidget, QMessageBox, QFileDialog,
     QDialog, QFrame, QSpacerItem, QSizePolicy
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QPalette, QColor
 
 from app_logic import AppLogic
@@ -35,7 +35,7 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle("Excel to Google Sheets")
-        self.setFixedSize(600, 750)
+        self.setFixedSize(500, 650)  # Уменьшили ширину с 600 до 500
 
         # Устанавливаем центральный виджет
         central_widget = QWidget()
@@ -44,15 +44,17 @@ class MainWindow(QMainWindow):
 
         # Основной layout с фиксированными отступами
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(24)
-        main_layout.setContentsMargins(32, 32, 32, 32)
+        main_layout.setSpacing(20)  # Уменьшили с 24 до 20
+        main_layout.setContentsMargins(24, 24, 24, 24)  # Уменьшили с 32 до 24
 
         # Создаем секции
         self.create_header_section(main_layout)
         self.create_url_section(main_layout)
         self.create_tabs_section(main_layout)
         self.create_progress_section(main_layout)
-        self.create_log_section(main_layout)
+
+        # Создаем выдвижной журнал (изначально скрыт)
+        self.create_sliding_log()
 
     def create_header_section(self, parent_layout):
         """Создает заголовок приложения"""
@@ -306,7 +308,6 @@ class MainWindow(QMainWindow):
         self.batch_process_btn.clicked.connect(self.start_batch_processing)
 
         # Интерфейс
-        self.toggle_log_btn.clicked.connect(self.toggle_log)
         self.tabs.currentChanged.connect(self.check_ready_state)
 
     def toggle_log(self):
@@ -552,13 +553,16 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
         self.status_label.show()
-        if not self.log_text.isVisible():
-            self.toggle_log()
+
+        # Автоматически показываем журнал при начале обработки
+        self.show_log()
 
     def hide_progress(self):
         """Скрывает прогресс-бар и статус"""
         self.progress_bar.setVisible(False)
         self.status_label.hide()
+
+        # Журнал остается открытым для просмотра результатов
 
     def update_progress(self, current: int, total: int, item_name: str):
         """Обновляет прогресс-бар"""

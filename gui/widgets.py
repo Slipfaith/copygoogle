@@ -6,7 +6,7 @@ import os
 import subprocess
 import platform
 from typing import List
-import styles
+from . import styles
 
 
 class ClickableTextEdit(QTextBrowser):

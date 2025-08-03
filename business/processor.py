@@ -2,10 +2,16 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, List, Optional, Callable
+from datetime import datetime
+import tempfile
+import shutil
 
 import gspread
 import openpyxl
 from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+import io
 
 from config import Config, load_config, BASE_DIR
 from logic.sheet_utils import copy_sheet_data, clear_column_cache
@@ -24,6 +30,7 @@ class ExcelToGoogleSheets:
         self.gc = None
         self.google_sheet = None
         self._google_creds = None
+        self._drive_service = None
 
     def _setup_logger(self) -> logging.Logger:
         logger = logging.getLogger(__name__)
@@ -80,6 +87,7 @@ class ExcelToGoogleSheets:
                     scopes=scope
                 )
                 self.gc = gspread.authorize(self._google_creds)
+                self._drive_service = build('drive', 'v3', credentials=self._google_creds)
 
             self.google_sheet = self.gc.open_by_key(sheet_id)
             self.logger.info(f"Успешное подключение к Google Таблице: {sheet_id}")
@@ -111,6 +119,101 @@ class ExcelToGoogleSheets:
             self.logger.error(f"Ошибка получения списка Google листов: {e}")
             return []
 
+    def backup_google_sheet(self, log_callback: Optional[Callable[[str], None]] = None) -> str:
+        try:
+            if not self.google_sheet:
+                raise ValueError("Не подключено к Google таблице")
+
+            self._log("Создание резервной копии Google таблицы...", log_callback)
+
+            file_id = self.google_sheet.id
+            file_name = self.google_sheet.title
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_name = f"{file_name}_backup_{timestamp}"
+
+            file_metadata = {
+                'name': backup_name,
+                'mimeType': 'application/vnd.google-apps.spreadsheet'
+            }
+
+            copied_file = self._drive_service.files().copy(
+                fileId=file_id,
+                body=file_metadata
+            ).execute()
+
+            backup_url = f"https://docs.google.com/spreadsheets/d/{copied_file['id']}/edit"
+            self._log(f"✓ Резервная копия создана: {backup_name}", log_callback)
+            self._log(f"📋 Ссылка: {backup_url}", log_callback)
+
+            return backup_url
+
+        except Exception as e:
+            self._log(f"❌ Ошибка создания резервной копии: {e}", log_callback)
+            raise
+
+    def download_google_sheet(self, save_path: str, sheet_names: Optional[List[str]] = None,
+                              log_callback: Optional[Callable[[str], None]] = None) -> str:
+        try:
+            if not self.google_sheet:
+                raise ValueError("Не подключено к Google таблице")
+
+            self._log("Скачивание Google таблицы...", log_callback)
+
+            file_id = self.google_sheet.id
+
+            if sheet_names:
+                with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp_file:
+                    request = self._drive_service.files().export_media(
+                        fileId=file_id,
+                        mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    )
+
+                    fh = io.BytesIO()
+                    downloader = MediaIoBaseDownload(fh, request)
+                    done = False
+                    while not done:
+                        status, done = downloader.next_chunk()
+                        if status:
+                            self._log(f"Скачивание: {int(status.progress() * 100)}%", log_callback)
+
+                    fh.seek(0)
+                    tmp_file.write(fh.read())
+                    tmp_file_path = tmp_file.name
+
+                wb = openpyxl.load_workbook(tmp_file_path)
+                sheets_to_remove = [sheet for sheet in wb.sheetnames if sheet not in sheet_names]
+                for sheet_name in sheets_to_remove:
+                    wb.remove(wb[sheet_name])
+
+                wb.save(save_path)
+                wb.close()
+                os.unlink(tmp_file_path)
+
+                self._log(f"✓ Скачаны листы: {', '.join(sheet_names)}", log_callback)
+            else:
+                request = self._drive_service.files().export_media(
+                    fileId=file_id,
+                    mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+
+                fh = io.FileIO(save_path, 'wb')
+                downloader = MediaIoBaseDownload(fh, request)
+                done = False
+                while not done:
+                    status, done = downloader.next_chunk()
+                    if status:
+                        self._log(f"Скачивание: {int(status.progress() * 100)}%", log_callback)
+
+                fh.close()
+                self._log("✓ Скачана полная таблица", log_callback)
+
+            self._log(f"💾 Сохранено: {save_path}", log_callback)
+            return save_path
+
+        except Exception as e:
+            self._log(f"❌ Ошибка скачивания: {e}", log_callback)
+            raise
+
     def process_excel_file(
             self,
             excel_path: str,
@@ -121,11 +224,9 @@ class ExcelToGoogleSheets:
             if not os.path.exists(excel_path):
                 raise FileNotFoundError(f"Excel файл не найден: {excel_path}")
 
-            # Очищаем кэш колонок перед обработкой нового файла
             clear_column_cache()
 
             self._log("Загрузка Excel файла...", log_callback)
-            # Загружаем две версии книги: с формулами и с закешированными значениями
             wb_formulas = openpyxl.load_workbook(excel_path, data_only=False)
             wb_values = openpyxl.load_workbook(excel_path, data_only=True)
             self._log(
@@ -212,7 +313,6 @@ class ExcelToGoogleSheets:
 
             for mapping in file_mappings:
                 try:
-                    # Очищаем кэш перед каждым файлом
                     clear_column_cache()
 
                     excel_path = mapping['excel_path']
@@ -231,7 +331,6 @@ class ExcelToGoogleSheets:
                             progress_callback(processed, total_mappings, os.path.basename(excel_path))
                         continue
 
-                    # Загружаем две версии книги: с формулами и со значениями
                     wb_formulas = openpyxl.load_workbook(excel_path, data_only=False)
                     wb_values = openpyxl.load_workbook(excel_path, data_only=True)
                     self._log(

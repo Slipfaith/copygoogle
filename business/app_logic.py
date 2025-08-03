@@ -4,8 +4,8 @@ from typing import Dict, List, Optional, Callable
 
 from PySide6.QtCore import QThread, Signal
 
-from business.processor import ExcelToGoogleSheets
-from config import BASE_DIR
+from .processor import ExcelToGoogleSheets
+from .config import BASE_DIR
 
 
 class WorkerThread(QThread):

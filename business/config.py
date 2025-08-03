@@ -5,7 +5,7 @@ import yaml
 import os
 
 # Базовая директория проекта
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 @dataclass

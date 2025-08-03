@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Dict
 
-from config import BASE_DIR
+from .config import BASE_DIR
 
 LINKS_FILE = BASE_DIR / 'saved_links.json'
 

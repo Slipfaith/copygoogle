@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QGridLayout, QScrollArea, QWidget
 )
 from PySide6.QtCore import Qt
-import styles
+from .. import styles
 
 
 class MappingDialog(QDialog):

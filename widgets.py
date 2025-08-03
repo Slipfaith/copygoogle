@@ -1,6 +1,7 @@
-from PySide6.QtWidgets import QTextBrowser, QWidget, QVBoxLayout, QLabel, QFileDialog, QSizePolicy
+from PySide6.QtWidgets import QTextBrowser, QGraphicsDropShadowEffect, QWidget, QVBoxLayout, QLabel, QFileDialog, QSizePolicy
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QGraphicsDropShadowEffect, QColor
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QColor
+
 import os
 import subprocess
 import platform

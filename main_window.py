@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QGroupBox, QSpinBox, QTabWidget, QListWidget, QListWidgetItem,
     QGraphicsDropShadowEffect, QSizePolicy, QCheckBox
 )
-from PySide6.QtCore import Qt, QThread, Signal, QMimeData, QTimer, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QThread, Signal, QMimeData, QTimer, QPropertyAnimation, QEasingCurve, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPalette, QColor, QFont, QIcon, QTextCursor, QTextCharFormat
 
 from business.processor import ExcelToGoogleSheets
@@ -31,15 +31,25 @@ class ClickableTextEdit(QTextBrowser):
         self.anchorClicked.connect(self.handle_click)
         
     def handle_click(self, url):
-        if url.startswith("file://"):
-            path = url.replace("file://", "")
-            if os.path.exists(path):
-                if platform.system() == 'Windows':
-                    subprocess.run(['explorer', '/select,', path])
-                elif platform.system() == 'Darwin':
-                    subprocess.run(['open', '-R', path])
-                else:
-                    subprocess.run(['xdg-open', os.path.dirname(path)])
+        """Open local files referenced by clicked links."""
+        # anchorClicked passes a QUrl object; convert it to a local file path
+        if hasattr(url, "isLocalFile") and url.isLocalFile():
+            path = url.toLocalFile()
+        else:
+            # fall back to string handling in case a plain string is received
+            url_str = str(url)
+            if url_str.startswith("file://"):
+                path = url_str.replace("file://", "")
+            else:
+                return
+
+        if os.path.exists(path):
+            if platform.system() == 'Windows':
+                subprocess.run(['explorer', '/select,', path])
+            elif platform.system() == 'Darwin':
+                subprocess.run(['open', '-R', path])
+            else:
+                subprocess.run(['xdg-open', os.path.dirname(path)])
 
 
 class ModernDropArea(QWidget):

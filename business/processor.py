@@ -2,7 +2,6 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, List, Optional, Callable
-from datetime import datetime
 import tempfile
 import shutil
 
@@ -118,38 +117,6 @@ class ExcelToGoogleSheets:
         except Exception as e:
             self.logger.error(f"Ошибка получения списка Google листов: {e}")
             return []
-
-    def backup_google_sheet(self, log_callback: Optional[Callable[[str], None]] = None) -> str:
-        try:
-            if not self.google_sheet:
-                raise ValueError("Не подключено к Google таблице")
-
-            self._log("Создание резервной копии Google таблицы...", log_callback)
-
-            file_id = self.google_sheet.id
-            file_name = self.google_sheet.title
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_name = f"{file_name}_backup_{timestamp}"
-
-            file_metadata = {
-                'name': backup_name,
-                'mimeType': 'application/vnd.google-apps.spreadsheet'
-            }
-
-            copied_file = self._drive_service.files().copy(
-                fileId=file_id,
-                body=file_metadata
-            ).execute()
-
-            backup_url = f"https://docs.google.com/spreadsheets/d/{copied_file['id']}/edit"
-            self._log(f"✓ Резервная копия создана: {backup_name}", log_callback)
-            self._log(f"📋 Ссылка: {backup_url}", log_callback)
-
-            return backup_url
-
-        except Exception as e:
-            self._log(f"❌ Ошибка создания резервной копии: {e}", log_callback)
-            raise
 
     def download_google_sheet(self, save_path: str, sheet_names: Optional[List[str]] = None,
                               log_callback: Optional[Callable[[str], None]] = None) -> str:

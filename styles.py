@@ -145,17 +145,6 @@ DOWNLOAD_BUTTON_STYLE = """
     }
 """
 
-BACKUP_CHECKBOX_STYLE = """
-    QCheckBox {
-        color: #495057;
-        font-size: 13px;
-    }
-    QCheckBox::indicator {
-        width: 18px;
-        height: 18px;
-    }
-"""
-
 TAB_WIDGET_STYLE = """
     QTabWidget::pane {
         border: none;

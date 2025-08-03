@@ -11,7 +11,7 @@ from typing import Optional, Dict, List, Tuple
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QTextEdit, QProgressBar, QLabel, QFrame,
+    QPushButton, QTextBrowser, QProgressBar, QLabel, QFrame,
     QMessageBox, QFileDialog, QLineEdit, QDialog, QDialogButtonBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
     QGroupBox, QSpinBox, QTabWidget, QListWidget, QListWidgetItem,
@@ -27,6 +27,18 @@ from config import BASE_DIR, create_sample_config
 from dialogs import BatchMappingDialog, MappingDialog, DropArea
 
 BASE_DIR = Path(__file__).resolve().parent
+
+
+class ClickableTextEdit(QTextBrowser):
+    """Text browser that emits a signal when a link is clicked."""
+
+    link_clicked = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Disable Qt's default link navigation so we can handle it ourselves
+        self.setOpenLinks(False)
+        self.anchorClicked.connect(lambda url: self.link_clicked.emit(url.toString()))
 
 
 class ModernDropArea(QWidget):
@@ -478,11 +490,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.status_label)
 
         # Лог (компактный)
-        self.log_text = QTextEdit()
+        self.log_text = ClickableTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setMaximumHeight(80)
         self.log_text.setStyleSheet("""
-            QTextEdit {
+            QTextBrowser {
                 border: 1px solid #dee2e6;
                 border-radius: 6px;
                 background-color: #f8f9fa;

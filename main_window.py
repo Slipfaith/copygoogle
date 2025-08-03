@@ -4,7 +4,7 @@ import subprocess
 import platform
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, List, Tuple
+from typing import List
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -14,12 +14,13 @@ from PySide6.QtWidgets import (
     QGroupBox, QSpinBox, QTabWidget, QListWidget, QListWidgetItem,
     QGraphicsDropShadowEffect, QSizePolicy, QCheckBox
 )
-from PySide6.QtCore import Qt, QThread, Signal, QMimeData, QTimer, QPropertyAnimation, QEasingCurve, QUrl
+from PySide6.QtCore import Qt, Signal, QMimeData, QTimer, QPropertyAnimation, QEasingCurve, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPalette, QColor, QFont, QIcon, QTextCursor, QTextCharFormat
 
-from business.processor import ExcelToGoogleSheets
+from app_logic import AppLogic
 from config import BASE_DIR, create_sample_config
-from dialogs import BatchMappingDialog, MappingDialog, DropArea, DownloadDialog
+from dialogs import BatchMappingDialog, MappingDialog, DownloadDialog
+import styles
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -64,13 +65,7 @@ class ModernDropArea(QWidget):
         self.setMaximumWidth(400)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
-        self.setStyleSheet("""
-            ModernDropArea {
-                background-color: #f8f9fa;
-                border: 2px dashed #dee2e6;
-                border-radius: 8px;
-            }
-        """)
+        self.setStyleSheet(f"ModernDropArea {{{styles.DROP_AREA_STYLE}}}")
 
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 15, 20, 15)
@@ -118,22 +113,10 @@ class ModernDropArea(QWidget):
             valid_files = [u for u in urls if u.toLocalFile().lower().endswith(('.xlsx', '.xls'))]
             if valid_files:
                 event.acceptProposedAction()
-                self.setStyleSheet("""
-                    ModernDropArea {
-                        background-color: #e7f3ff;
-                        border: 2px solid #0066cc;
-                        border-radius: 8px;
-                    }
-                """)
+                self.setStyleSheet(f"ModernDropArea {{{styles.DROP_AREA_ACTIVE_STYLE}}}")
 
     def dragLeaveEvent(self, event):
-        self.setStyleSheet("""
-            ModernDropArea {
-                background-color: #f8f9fa;
-                border: 2px dashed #dee2e6;
-                border-radius: 8px;
-            }
-        """)
+        self.setStyleSheet(f"ModernDropArea {{{styles.DROP_AREA_STYLE}}}")
 
     def dropEvent(self, event: QDropEvent):
         files = [u.toLocalFile() for u in event.mimeData().urls()
@@ -146,13 +129,7 @@ class ModernDropArea(QWidget):
                 self.file_dropped.emit(files[0])
                 self.update_file_info(files[0])
 
-        self.setStyleSheet("""
-            ModernDropArea {
-                background-color: #f8f9fa;
-                border: 2px dashed #dee2e6;
-                border-radius: 8px;
-            }
-        """)
+        self.setStyleSheet(f"ModernDropArea {{{styles.DROP_AREA_STYLE}}}")
 
     def open_file_dialog(self):
         if self.accept_multiple:
@@ -192,87 +169,10 @@ class ModernDropArea(QWidget):
         self.file_info.setText("")
 
 
-class WorkerThread(QThread):
-    progress_update = Signal(int, int, str)
-    log_message = Signal(str)
-    finished_successfully = Signal()
-    error_occurred = Signal(str)
-
-    def __init__(self, mode: str, **kwargs):
-        super().__init__()
-        self.mode = mode
-        self.kwargs = kwargs
-        self.processor = None
-
-    def run(self):
-        try:
-            self.processor = ExcelToGoogleSheets(str(BASE_DIR / "config.yaml"))
-
-            if self.mode == "single":
-                excel_path = self.kwargs['excel_path']
-                google_sheet_url = self.kwargs['google_sheet_url']
-                config = self.kwargs['config']
-                create_backup = self.kwargs.get('create_backup', False)
-
-                self.processor.update_config(
-                    sheet_mapping=config['sheet_mapping'],
-                    column_mapping=config['column_mapping'],
-                    start_row=config['start_row']
-                )
-
-                self.log_message.emit("Подключение к Google Таблицам...")
-                self.processor.connect_to_google_sheets(google_sheet_url)
-
-                if create_backup:
-                    self.processor.backup_google_sheet(log_callback=self.log_message.emit)
-
-                self.processor.process_excel_file(
-                    excel_path,
-                    progress_callback=self.progress_update.emit,
-                    log_callback=self.log_message.emit
-                )
-
-            elif self.mode == "batch":
-                file_mappings = self.kwargs['file_mappings']
-                google_sheet_url = self.kwargs['google_sheet_url']
-                create_backup = self.kwargs.get('create_backup', False)
-
-                if create_backup:
-                    self.processor.connect_to_google_sheets(google_sheet_url)
-                    self.processor.backup_google_sheet(log_callback=self.log_message.emit)
-
-                self.processor.process_multiple_excel_files(
-                    file_mappings,
-                    google_sheet_url,
-                    progress_callback=self.progress_update.emit,
-                    log_callback=self.log_message.emit
-                )
-
-            elif self.mode == "download":
-                google_sheet_url = self.kwargs['google_sheet_url']
-                save_path = self.kwargs['save_path']
-                sheet_names = self.kwargs.get('sheet_names')
-
-                self.log_message.emit("Подключение к Google Таблицам...")
-                self.processor.connect_to_google_sheets(google_sheet_url)
-
-                self.processor.download_google_sheet(
-                    save_path,
-                    sheet_names=sheet_names,
-                    log_callback=self.log_message.emit
-                )
-
-            self.finished_successfully.emit()
-
-        except Exception as e:
-            self.error_occurred.emit(str(e))
-
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.processor = ExcelToGoogleSheets(str(BASE_DIR / "config.yaml"))
-        self.worker_thread = None
+        self.logic = AppLogic()
 
         self.single_file = None
         self.single_config = None
@@ -288,12 +188,7 @@ class MainWindow(QMainWindow):
         self.setFixedSize(550, 700)
 
         central_widget = QWidget()
-        central_widget.setStyleSheet("""
-            QWidget {
-                background-color: #ffffff;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            }
-        """)
+        central_widget.setStyleSheet(styles.WINDOW_STYLE)
         self.setCentralWidget(central_widget)
 
         layout = QVBoxLayout()
@@ -579,64 +474,14 @@ class MainWindow(QMainWindow):
     def create_button(self, text: str, color: str, hover_color: str, primary: bool = False) -> QPushButton:
         btn = QPushButton(text)
         if primary:
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    border: none;
-                    padding: 12px 24px;
-                    border-radius: 6px;
-                    font-size: 14px;
-                    font-weight: 500;
-                }}
-                QPushButton:hover {{
-                    background-color: {hover_color};
-                }}
-                QPushButton:pressed {{
-                    background-color: {hover_color};
-                }}
-                QPushButton:disabled {{
-                    background-color: #e9ecef;
-                    color: #adb5bd;
-                }}
-            """)
+            btn.setStyleSheet(styles.primary_button(color, hover_color))
         else:
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: white;
-                    color: {color};
-                    border: 1px solid {color};
-                    padding: 10px 20px;
-                    border-radius: 6px;
-                    font-size: 14px;
-                }}
-                QPushButton:hover {{
-                    background-color: {color};
-                    color: white;
-                }}
-                QPushButton:disabled {{
-                    border-color: #dee2e6;
-                    color: #adb5bd;
-                }}
-            """)
+            btn.setStyleSheet(styles.secondary_button(color))
         return btn
 
     def create_small_button(self, text: str) -> QPushButton:
         btn = QPushButton(text)
-        btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #6c757d;
-                border: none;
-                padding: 5px 10px;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                color: #495057;
-                background-color: #f8f9fa;
-                border-radius: 4px;
-            }
-        """)
+        btn.setStyleSheet(styles.SMALL_BUTTON_STYLE)
         return btn
 
     def toggle_log(self):
@@ -683,8 +528,7 @@ class MainWindow(QMainWindow):
 
         try:
             self.log_message("🔍 Получение списка листов...")
-            self.processor.connect_to_google_sheets(google_url)
-            sheet_names = self.processor.get_google_sheets()
+            sheet_names = self.logic.get_google_sheets(google_url)
             
             if not sheet_names:
                 raise Exception("Не удалось получить листы Google Таблицы")
@@ -692,27 +536,28 @@ class MainWindow(QMainWindow):
             dialog = DownloadDialog(sheet_names, self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 selected_sheets = dialog.get_selection()
-                
+
                 file_path, _ = QFileDialog.getSaveFileName(
                     self,
                     "Сохранить таблицу как",
-                    f"{self.processor.google_sheet.title}.xlsx",
+                    f"{self.logic.get_google_sheet_title()}.xlsx",
                     "Excel Files (*.xlsx)"
                 )
-                
+
                 if file_path:
                     self.disable_ui()
                     self.show_progress()
                     self.log_text.clear()
-                    
-                    self.worker_thread = WorkerThread(
-                        mode="download",
-                        google_sheet_url=google_url,
-                        save_path=file_path,
-                        sheet_names=selected_sheets
+
+                    self.logic.start_download(
+                        google_url,
+                        file_path,
+                        selected_sheets,
+                        self.update_progress,
+                        self.log_message,
+                        self.on_processing_finished,
+                        self.on_processing_error,
                     )
-                    self.connect_worker_signals()
-                    self.worker_thread.start()
 
         except Exception as e:
             self.log_message(f"❌ Ошибка: {e}")
@@ -731,13 +576,12 @@ class MainWindow(QMainWindow):
         try:
             self.log_message("🔍 Анализ файла...")
 
-            excel_sheets = self.processor.get_excel_sheets(self.single_file)
+            excel_sheets = self.logic.get_excel_sheets(self.single_file)
             if not excel_sheets:
                 raise Exception("Не удалось получить листы Excel")
 
             self.log_message("🔗 Подключение к Google Таблицам...")
-            self.processor.connect_to_google_sheets(self.google_url_input.text().strip())
-            google_sheets = self.processor.get_google_sheets()
+            google_sheets = self.logic.get_google_sheets(self.google_url_input.text().strip())
             if not google_sheets:
                 raise Exception("Не удалось получить листы Google")
 
@@ -774,15 +618,16 @@ class MainWindow(QMainWindow):
         ]
         self.open_log_file(header)
 
-        self.worker_thread = WorkerThread(
-            mode="single",
-            excel_path=self.single_file,
-            google_sheet_url=self.google_url_input.text().strip(),
-            config=self.single_config,
-            create_backup=self.backup_checkbox.isChecked()
+        self.logic.start_single_processing(
+            self.single_file,
+            self.google_url_input.text().strip(),
+            self.single_config,
+            self.backup_checkbox.isChecked(),
+            self.update_progress,
+            self.log_message,
+            self.on_processing_finished,
+            self.on_processing_error,
         )
-        self.connect_worker_signals()
-        self.worker_thread.start()
 
     def on_batch_files_dropped(self, files: List[str]):
         added_count = 0
@@ -835,8 +680,7 @@ class MainWindow(QMainWindow):
         try:
             self.log_message("🔗 Подключение к Google Таблицам...")
 
-            self.processor.connect_to_google_sheets(self.google_url_input.text().strip())
-            google_sheets = self.processor.get_google_sheets()
+            google_sheets = self.logic.get_google_sheets(self.google_url_input.text().strip())
             if not google_sheets:
                 raise Exception("Не удалось получить листы Google")
 
@@ -873,20 +717,15 @@ class MainWindow(QMainWindow):
         ]
         self.open_log_file(header)
 
-        self.worker_thread = WorkerThread(
-            mode="batch",
-            file_mappings=self.batch_mappings,
-            google_sheet_url=self.google_url_input.text().strip(),
-            create_backup=self.backup_checkbox.isChecked()
+        self.logic.start_batch_processing(
+            self.batch_mappings,
+            self.google_url_input.text().strip(),
+            self.backup_checkbox.isChecked(),
+            self.update_progress,
+            self.log_message,
+            self.on_processing_finished,
+            self.on_processing_error,
         )
-        self.connect_worker_signals()
-        self.worker_thread.start()
-
-    def connect_worker_signals(self):
-        self.worker_thread.progress_update.connect(self.update_progress)
-        self.worker_thread.log_message.connect(self.log_message)
-        self.worker_thread.finished_successfully.connect(self.on_processing_finished)
-        self.worker_thread.error_occurred.connect(self.on_processing_error)
 
     def disable_ui(self):
         self.tabs.setEnabled(False)

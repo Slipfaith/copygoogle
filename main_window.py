@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QTabWidget, QMessageBox, QFileDialog,
     QDialog, QFrame, QSpacerItem, QSizePolicy
 )
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, Property
 from PySide6.QtGui import QPalette, QColor
 
 from app_logic import AppLogic
@@ -20,6 +20,184 @@ from widgets import ClickableTextEdit, ModernDropArea
 from log_service import LogService
 from state import AppState
 from utils import handle_errors
+
+
+class SlidingLogWidget(QWidget):
+    """Виджет слайдера для журнала логов (справа)"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedWidth(0)  # Изначально скрыт
+        self.max_width = 300
+        self.min_width = 0
+        self.is_expanded = False
+        self.has_been_shown = False  # Флаг, показывался ли слайдер
+
+        self.init_ui()
+        self.init_animation()
+
+    def init_ui(self):
+        """Инициализация UI слайдера"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 0, 0, 0)
+        layout.setSpacing(8)
+
+        # Заголовок с кнопкой закрытия
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(8, 8, 8, 8)
+
+        # Индикатор и заголовок
+        self.status_dot = QLabel("🟢")
+        self.status_dot.setFixedSize(16, 16)
+
+        title_label = QLabel("Лог")
+        title_label.setStyleSheet("font-weight: bold; color: #333; font-size: 12px;")
+
+        # Кнопка скрыть/показать
+        self.toggle_btn = QPushButton("🔽")  # Стрелка вниз = скрыть
+        self.toggle_btn.setFixedSize(20, 20)
+        self.toggle_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                color: #666;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                color: #333;
+                background: #f0f0f0;
+                border-radius: 10px;
+            }
+        """)
+        self.toggle_btn.clicked.connect(self.toggle_visibility)
+
+        header_layout.addWidget(self.status_dot)
+        header_layout.addWidget(title_label)
+        header_layout.addStretch()
+        header_layout.addWidget(self.toggle_btn)
+
+        # Контейнер заголовка
+        header_frame = QFrame()
+        header_frame.setLayout(header_layout)
+        header_frame.setStyleSheet("""
+            QFrame {
+                background: #f5f5f5;
+                border-bottom: 1px solid #ddd;
+            }
+        """)
+
+        # Область логов
+        self.log_text = ClickableTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background: white;
+                border: none;
+                color: #333;
+                font-family: Consolas, monospace;
+                font-size: 11px;
+                padding: 8px;
+            }
+            QScrollBar:vertical {
+                background: #f0f0f0;
+                width: 6px;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical {
+                background: #ccc;
+                border-radius: 3px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #999;
+            }
+        """)
+
+        layout.addWidget(header_frame)
+        layout.addWidget(self.log_text, 1)
+
+        # Стиль всего слайдера
+        self.setStyleSheet("""
+            SlidingLogWidget {
+                background: white;
+                border: 1px solid #ddd;
+                border-right: none;
+            }
+        """)
+
+    def init_animation(self):
+        """Инициализация анимации"""
+        self.animation = QPropertyAnimation(self, b"maximumWidth")
+        self.animation.setDuration(300)
+        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    def slide_right(self):
+        """Выдвинуть слайдер вправо"""
+        if self.is_expanded:
+            return
+
+        self.is_expanded = True
+        self.animation.setStartValue(self.min_width)
+        self.animation.setEndValue(self.max_width)
+        self.animation.start()
+
+    def slide_left(self):
+        """Скрыть слайдер влево"""
+        if not self.is_expanded:
+            return
+
+        self.is_expanded = False
+        self.animation.setStartValue(self.max_width)
+        self.animation.setEndValue(self.min_width)
+        self.animation.start()
+
+    def toggle_visibility(self):
+        """Переключить видимость слайдера"""
+        if self.is_expanded:
+            self.slide_left()
+            self.toggle_btn.setText("🔼")  # Стрелка вверх = показать
+            self.toggle_btn.setToolTip("Показать лог")
+        else:
+            self.slide_right()
+            self.toggle_btn.setText("🔽")  # Стрелка вниз = скрыть
+            self.toggle_btn.setToolTip("Скрыть лог")
+
+        # Синхронизировать с внешней кнопкой
+        if hasattr(self.parent(), 'sync_toggle_button'):
+            self.parent().sync_toggle_button()
+
+    def add_log_message(self, message: str, message_type: str = "info"):
+        """Добавить сообщение в лог"""
+        # Обновить индикатор статуса
+        if message_type == "error":
+            self.status_dot.setText("🔴")
+        elif message_type == "warning":
+            self.status_dot.setText("🟡")
+        elif message_type == "success":
+            self.status_dot.setText("🟢")
+        else:
+            self.status_dot.setText("🔵")
+
+        # Добавить сообщение
+        self.log_text.append(message)
+
+        # Автопрокрутка к концу
+        scrollbar = self.log_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+        # При первом сообщении показать слайдер и сигнализировать родителю
+        if not self.has_been_shown:
+            self.has_been_shown = True
+            self.slide_right()
+            # Уведомить родительское окно о первом показе
+            if hasattr(self.parent(), 'on_log_first_shown'):
+                self.parent().on_log_first_shown()
+
+    def clear_log(self):
+        """Очистить лог"""
+        self.log_text.clear()
+        self.status_dot.setText("🟢")
 
 
 class MainWindow(QMainWindow):
@@ -35,66 +213,141 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle("Excel to Google Sheets")
-        self.setFixedSize(500, 650)  # Уменьшили ширину с 600 до 500
+        self.setFixedSize(750, 650)  # Уменьшили размер окна
 
-        # Устанавливаем центральный виджет
-        central_widget = QWidget()
-        central_widget.setStyleSheet(styles.WINDOW_STYLE)
-        self.setCentralWidget(central_widget)
+        # Главный контейнер с горизонтальным разделением
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
 
-        # Основной layout с фиксированными отступами
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(20)  # Уменьшили с 24 до 20
-        main_layout.setContentsMargins(24, 24, 24, 24)  # Уменьшили с 32 до 24
+        main_layout = QHBoxLayout(main_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Основная область (слева)
+        self.content_widget = QWidget()
+        self.content_widget.setStyleSheet("background: white;")
+        main_layout.addWidget(self.content_widget)
+
+        # Слайдер логов (справа)
+        self.sliding_log = SlidingLogWidget(self)
+        main_layout.addWidget(self.sliding_log)
+
+        # Основной layout для контента
+        content_layout = QVBoxLayout(self.content_widget)
+        content_layout.setSpacing(20)
+        content_layout.setContentsMargins(24, 24, 24, 24)
 
         # Создаем секции
-        self.create_header_section(main_layout)
-        self.create_url_section(main_layout)
-        self.create_tabs_section(main_layout)
-        self.create_progress_section(main_layout)
+        self.create_header_section(content_layout)
+        self.create_url_section(content_layout)
+        self.create_tabs_section(content_layout)
+        self.create_progress_section(content_layout)
+        self.create_log_toggle_section(content_layout)
 
-        # Создаем выдвижной журнал (изначально скрыт)
-        self.create_sliding_log()
+    def create_log_toggle_section(self, parent_layout):
+        """Создает секцию с кнопкой управления логом (изначально скрыта)"""
+        self.log_toggle_container = QHBoxLayout()
+        self.log_toggle_container.addStretch()
+
+        self.log_toggle_btn = QPushButton("📋 Скрыть лог")
+        self.log_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #666;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background: #f8f9fa;
+                color: #333;
+            }
+        """)
+        self.log_toggle_btn.setFixedHeight(28)
+        self.log_toggle_btn.clicked.connect(self.toggle_log_from_button)
+        self.log_toggle_btn.hide()  # Изначально скрыта
+
+        self.log_toggle_container.addWidget(self.log_toggle_btn)
+        parent_layout.addLayout(self.log_toggle_container)
+
+    def on_log_first_shown(self):
+        """Вызывается при первом показе лога"""
+        self.log_toggle_btn.show()  # Показать кнопку управления
+
+    def toggle_log_from_button(self):
+        """Переключение лога из кнопки в интерфейсе"""
+        if self.sliding_log.is_expanded:
+            self.sliding_log.slide_left()
+            self.log_toggle_btn.setText("📋 Показать лог")
+        else:
+            self.sliding_log.slide_right()
+            self.log_toggle_btn.setText("📋 Скрыть лог")
+
+    def sync_toggle_button(self):
+        """Синхронизация кнопки с состоянием слайдера"""
+        if self.sliding_log.is_expanded:
+            self.log_toggle_btn.setText("📋 Скрыть лог")
+        else:
+            self.log_toggle_btn.setText("📋 Показать лог")
 
     def create_header_section(self, parent_layout):
         """Создает заголовок приложения"""
-        header_frame = QFrame()
-        header_layout = QVBoxLayout(header_frame)
-        header_layout.setSpacing(8)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-
         title = QLabel("Excel → Google Sheets")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet(styles.TITLE_LABEL_STYLE)
+        title.setStyleSheet("""
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin: 0;
+        """)
 
-        subtitle = QLabel("Профессиональный инструмент для синхронизации данных")
+        subtitle = QLabel("Синхронизация данных")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle.setStyleSheet(styles.SUBTITLE_LABEL_STYLE)
+        subtitle.setStyleSheet("""
+            font-size: 14px;
+            color: #666;
+            margin: 0;
+        """)
 
-        header_layout.addWidget(title)
-        header_layout.addWidget(subtitle)
-
-        parent_layout.addWidget(header_frame)
+        parent_layout.addWidget(title)
+        parent_layout.addWidget(subtitle)
 
     def create_url_section(self, parent_layout):
         """Создает секцию для ввода URL Google Таблицы"""
         url_container = QFrame()
-        url_container.setStyleSheet(styles.URL_CONTAINER_STYLE)
-        url_container.setFixedHeight(100)  # Увеличили высоту
+        url_container.setStyleSheet("""
+            QFrame {
+                background: #f8f9fa;
+                border: 1px solid #e9ecef;
+                border-radius: 8px;
+                padding: 16px;
+            }
+        """)
 
         url_layout = QVBoxLayout(url_container)
-        url_layout.setSpacing(8)  # Уменьшили отступы между элементами
-        url_layout.setContentsMargins(16, 12, 16, 12)  # Уменьшили внутренние отступы
+        url_layout.setSpacing(8)
 
         # Заголовок секции
         url_label = QLabel("🔗 Ссылка на Google Таблицу")
-        url_label.setStyleSheet(styles.URL_LABEL_STYLE)
+        url_label.setStyleSheet("font-weight: bold; color: #333;")
 
         # Поле ввода
         self.google_url_input = QLineEdit()
         self.google_url_input.setPlaceholderText("https://docs.google.com/spreadsheets/d/...")
-        self.google_url_input.setStyleSheet(styles.URL_INPUT_STYLE)
-        self.google_url_input.setFixedHeight(40)  # Немного уменьшили высоту поля
+        self.google_url_input.setStyleSheet("""
+            QLineEdit {
+                padding: 10px;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                font-size: 13px;
+                background: white;
+            }
+            QLineEdit:focus {
+                border-color: #007bff;
+            }
+        """)
+        self.google_url_input.setFixedHeight(36)
 
         url_layout.addWidget(url_label)
         url_layout.addWidget(self.google_url_input)
@@ -105,28 +358,64 @@ class MainWindow(QMainWindow):
         """Создает секцию с табами"""
         # Контейнер для табов и кнопки скачивания
         tabs_container = QVBoxLayout()
-        tabs_container.setSpacing(12)
+        tabs_container.setSpacing(8)
 
         # Заголовок и кнопка скачивания
         tabs_header = QHBoxLayout()
-        tabs_header.setContentsMargins(0, 0, 0, 0)
-
-        # Добавляем растягивающийся элемент слева
         tabs_header.addStretch()
 
         # Кнопка скачивания
         self.download_btn = QPushButton("💾")
         self.download_btn.setEnabled(False)
-        self.download_btn.setStyleSheet(styles.download_button())
-        self.download_btn.setFixedSize(36, 36)
+        self.download_btn.setStyleSheet("""
+            QPushButton {
+                background: #ffc107;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 16px;
+                width: 32px;
+                height: 32px;
+            }
+            QPushButton:hover {
+                background: #e0a800;
+            }
+            QPushButton:disabled {
+                background: #ccc;
+            }
+        """)
+        self.download_btn.setFixedSize(32, 32)
         self.download_btn.setToolTip("Скачать Google таблицу")
 
         tabs_header.addWidget(self.download_btn)
 
         # Сами табы
         self.tabs = QTabWidget()
-        self.tabs.setStyleSheet(styles.TAB_WIDGET_STYLE)
-        self.tabs.setFixedHeight(380)
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                background: white;
+                padding: 16px;
+            }
+            QTabBar::tab {
+                background: #f8f9fa;
+                border: 1px solid #ddd;
+                border-bottom: none;
+                padding: 8px 16px;
+                margin-right: 2px;
+                border-radius: 6px 6px 0 0;
+            }
+            QTabBar::tab:selected {
+                background: white;
+                color: #007bff;
+                font-weight: bold;
+            }
+            QTabBar::tab:hover:!selected {
+                background: #e9ecef;
+            }
+        """)
+        self.tabs.setFixedHeight(300)
 
         # Создаем табы
         single_tab = self.create_single_tab()
@@ -144,15 +433,15 @@ class MainWindow(QMainWindow):
         """Создает таб для обработки одного файла"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setSpacing(20)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
+        layout.setContentsMargins(16, 16, 16, 16)
 
         # Область для перетаскивания
         drop_container = QHBoxLayout()
         drop_container.addStretch()
 
         self.single_drop_area = ModernDropArea(accept_multiple=False)
-        self.single_drop_area.setFixedSize(360, 100)
+        self.single_drop_area.setFixedSize(300, 80)
 
         drop_container.addWidget(self.single_drop_area)
         drop_container.addStretch()
@@ -161,17 +450,47 @@ class MainWindow(QMainWindow):
 
         # Кнопки управления
         buttons_layout = QVBoxLayout()
-        buttons_layout.setSpacing(12)
+        buttons_layout.setSpacing(8)
 
         self.single_mapping_btn = QPushButton("⚙️ Настроить маппинг")
         self.single_mapping_btn.setEnabled(False)
-        self.single_mapping_btn.setStyleSheet(styles.secondary_button())
-        self.single_mapping_btn.setFixedHeight(44)
+        self.single_mapping_btn.setStyleSheet("""
+            QPushButton {
+                background: #6c757d;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #5a6268;
+            }
+            QPushButton:disabled {
+                background: #ccc;
+            }
+        """)
+        self.single_mapping_btn.setFixedHeight(36)
 
         self.single_process_btn = QPushButton("🚀 Начать копирование")
         self.single_process_btn.setEnabled(False)
-        self.single_process_btn.setStyleSheet(styles.success_button())
-        self.single_process_btn.setFixedHeight(44)
+        self.single_process_btn.setStyleSheet("""
+            QPushButton {
+                background: #28a745;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #218838;
+            }
+            QPushButton:disabled {
+                background: #ccc;
+            }
+        """)
+        self.single_process_btn.setFixedHeight(36)
 
         buttons_layout.addWidget(self.single_mapping_btn)
         buttons_layout.addWidget(self.single_process_btn)
@@ -185,15 +504,15 @@ class MainWindow(QMainWindow):
         """Создает таб для пакетной обработки"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setSpacing(16)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
 
         # Область для перетаскивания
         drop_container = QHBoxLayout()
         drop_container.addStretch()
 
         self.batch_drop_area = ModernDropArea(accept_multiple=True)
-        self.batch_drop_area.setFixedSize(360, 80)
+        self.batch_drop_area.setFixedSize(300, 60)
 
         drop_container.addWidget(self.batch_drop_area)
         drop_container.addStretch()
@@ -202,20 +521,64 @@ class MainWindow(QMainWindow):
 
         # Список файлов
         self.files_list = QListWidget()
-        self.files_list.setFixedHeight(80)
-        self.files_list.setStyleSheet(styles.FILES_LIST_STYLE)
+        self.files_list.setFixedHeight(60)
+        self.files_list.setStyleSheet("""
+            QListWidget {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background: white;
+                padding: 4px;
+                font-size: 12px;
+            }
+            QListWidget::item {
+                padding: 4px;
+                margin: 1px;
+                border-radius: 3px;
+            }
+            QListWidget::item:selected {
+                background: #e3f2fd;
+                color: #1976d2;
+            }
+            QListWidget::item:hover {
+                background: #f5f5f5;
+            }
+        """)
 
         # Кнопки управления списком
         list_buttons_layout = QHBoxLayout()
         list_buttons_layout.setSpacing(8)
 
         self.clear_btn = QPushButton("🗑️ Очистить")
-        self.clear_btn.setStyleSheet(styles.small_button())
-        self.clear_btn.setFixedHeight(32)
+        self.clear_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #666;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background: #f8f9fa;
+            }
+        """)
+        self.clear_btn.setFixedHeight(28)
 
         self.remove_btn = QPushButton("➖ Удалить выбранные")
-        self.remove_btn.setStyleSheet(styles.small_button())
-        self.remove_btn.setFixedHeight(32)
+        self.remove_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #666;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background: #f8f9fa;
+            }
+        """)
+        self.remove_btn.setFixedHeight(28)
 
         list_buttons_layout.addWidget(self.clear_btn)
         list_buttons_layout.addWidget(self.remove_btn)
@@ -223,17 +586,47 @@ class MainWindow(QMainWindow):
 
         # Основные кнопки
         main_buttons_layout = QVBoxLayout()
-        main_buttons_layout.setSpacing(12)
+        main_buttons_layout.setSpacing(8)
 
         self.batch_mapping_btn = QPushButton("⚙️ Настроить маппинг")
         self.batch_mapping_btn.setEnabled(False)
-        self.batch_mapping_btn.setStyleSheet(styles.secondary_button())
-        self.batch_mapping_btn.setFixedHeight(44)
+        self.batch_mapping_btn.setStyleSheet("""
+            QPushButton {
+                background: #6c757d;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #5a6268;
+            }
+            QPushButton:disabled {
+                background: #ccc;
+            }
+        """)
+        self.batch_mapping_btn.setFixedHeight(36)
 
         self.batch_process_btn = QPushButton("🚀 Начать копирование")
         self.batch_process_btn.setEnabled(False)
-        self.batch_process_btn.setStyleSheet(styles.success_button())
-        self.batch_process_btn.setFixedHeight(44)
+        self.batch_process_btn.setStyleSheet("""
+            QPushButton {
+                background: #28a745;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #218838;
+            }
+            QPushButton:disabled {
+                background: #ccc;
+            }
+        """)
+        self.batch_process_btn.setFixedHeight(36)
 
         main_buttons_layout.addWidget(self.batch_mapping_btn)
         main_buttons_layout.addWidget(self.batch_process_btn)
@@ -249,16 +642,30 @@ class MainWindow(QMainWindow):
     def create_progress_section(self, parent_layout):
         """Создает секцию прогресса"""
         progress_container = QVBoxLayout()
-        progress_container.setSpacing(8)
+        progress_container.setSpacing(6)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         self.progress_bar.setTextVisible(True)
-        self.progress_bar.setStyleSheet(styles.PROGRESS_BAR_STYLE)
-        self.progress_bar.setFixedHeight(28)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: none;
+                border-radius: 4px;
+                background: #e9ecef;
+                text-align: center;
+                font-weight: bold;
+                color: #333;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background: #007bff;
+                border-radius: 4px;
+            }
+        """)
+        self.progress_bar.setFixedHeight(24)
 
         self.status_label = QLabel("")
-        self.status_label.setStyleSheet(styles.STATUS_LABEL_STYLE)
+        self.status_label.setStyleSheet("color: #666; font-size: 12px;")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.hide()
 
@@ -266,28 +673,6 @@ class MainWindow(QMainWindow):
         progress_container.addWidget(self.status_label)
 
         parent_layout.addLayout(progress_container)
-
-    def create_log_section(self, parent_layout):
-        """Создает секцию логов"""
-        log_container = QVBoxLayout()
-        log_container.setSpacing(8)
-
-        # Кнопка переключения логов
-        self.toggle_log_btn = QPushButton("📋 Показать журнал")
-        self.toggle_log_btn.setStyleSheet(styles.small_button())
-        self.toggle_log_btn.setFixedHeight(32)
-
-        # Область логов
-        self.log_text = ClickableTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setFixedHeight(140)
-        self.log_text.setStyleSheet(styles.LOG_TEXT_STYLE)
-        self.log_text.hide()
-
-        log_container.addWidget(self.toggle_log_btn)
-        log_container.addWidget(self.log_text)
-
-        parent_layout.addLayout(log_container)
 
     def connect_signals(self):
         """Подключает сигналы к слотам"""
@@ -310,27 +695,18 @@ class MainWindow(QMainWindow):
         # Интерфейс
         self.tabs.currentChanged.connect(self.check_ready_state)
 
-    def toggle_log(self):
-        """Переключает видимость журнала"""
-        if self.log_text.isVisible():
-            self.log_text.hide()
-            self.toggle_log_btn.setText("📋 Показать журнал")
-        else:
-            self.log_text.show()
-            self.toggle_log_btn.setText("📋 Скрыть журнал")
-
     @handle_errors
     def check_config(self):
         """Проверяет наличие конфигурационных файлов"""
         config_path = BASE_DIR / "config.yaml"
         if not config_path.exists():
-            self.log_message("⚠️ Создаю config.yaml...")
+            self.log_message("⚠️ Создаю config.yaml...", "warning")
             create_sample_config(config_path)
-            self.log_message("✓ Создан config.yaml")
+            self.log_message("✓ Создан config.yaml", "success")
 
         creds_path = BASE_DIR / "credentials.json"
         if not creds_path.exists():
-            self.log_message("⚠️ Требуется файл credentials.json!")
+            self.log_message("⚠️ Требуется файл credentials.json!", "warning")
 
     def check_ready_state(self):
         """Проверяет готовность интерфейса и активирует кнопки"""
@@ -377,23 +753,45 @@ class MainWindow(QMainWindow):
             if file_path:
                 self.disable_ui()
                 self.show_progress()
-                self.log_text.clear()
+                self.sliding_log.clear_log()
+
+                # НЕ создаем файл журнала для скачивания
                 self.logic.start_download(
                     google_url,
                     file_path,
                     selected_sheets,
                     self.update_progress,
                     self.log_message,
-                    self.on_processing_finished,
+                    self.on_download_finished,  # Отдельный обработчик для скачивания
                     self.on_processing_error,
                 )
+
+    def on_download_finished(self):
+        """Обработчик успешного завершения скачивания"""
+        self.progress_bar.setValue(100)
+        self.progress_bar.setFormat("✅ Скачивание завершено!")
+        self.status_label.setText("🎉 Файл успешно скачан")
+        self.log_message("🎉 Скачивание выполнено успешно!", "success")
+
+        # Скрываем прогресс через 3 секунды
+        QTimer.singleShot(3000, self.hide_progress)
+        self.enable_ui()
+
+        # Показываем уведомление БЕЗ упоминания журнала
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Скачивание завершено")
+        msg.setText("🎉 Файл успешно скачан!")
+        msg.setInformativeText("Google таблица была успешно сохранена на ваш компьютер.")
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.exec()
 
     def on_single_file_dropped(self, file_path: str):
         """Обработчик добавления одиночного файла"""
         self.state.single_file = file_path
         self.state.single_config = None
         self.check_ready_state()
-        self.log_message(f"✓ Выбран файл: {os.path.basename(file_path)}")
+        self.log_message(f"✓ Выбран файл: {os.path.basename(file_path)}", "success")
 
     @handle_errors
     def configure_single_mapping(self):
@@ -415,7 +813,7 @@ class MainWindow(QMainWindow):
         dialog = MappingDialog(excel_sheets, google_sheets, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.state.single_config = dialog.get_config()
-            self.log_message("✅ Маппинг настроен успешно!")
+            self.log_message("✅ Маппинг настроен успешно!", "success")
             self.check_ready_state()
 
     def start_single_processing(self):
@@ -425,8 +823,9 @@ class MainWindow(QMainWindow):
 
         self.disable_ui()
         self.show_progress()
-        self.log_text.clear()
+        self.sliding_log.clear_log()
 
+        # Создаем файл журнала ТОЛЬКО для копирования данных
         header = [
             f"🚀 Начало обработки: {datetime.now().strftime('%H:%M:%S')}",
             f"📄 Файл: {os.path.basename(self.state.single_file)}",
@@ -438,6 +837,32 @@ class MainWindow(QMainWindow):
             self.state.single_file,
             self.google_url_input.text().strip(),
             self.state.single_config,
+            self.update_progress,
+            self.log_message,
+            self.on_processing_finished,
+            self.on_processing_error,
+        )
+
+    def start_batch_processing(self):
+        """Запуск пакетной обработки"""
+        if not self.state.batch_mappings or not self.google_url_input.text().strip():
+            return
+
+        self.disable_ui()
+        self.show_progress()
+        self.sliding_log.clear_log()
+
+        # Создаем файл журнала ТОЛЬКО для копирования данных
+        header = [
+            f"🚀 Начало пакетной обработки: {datetime.now().strftime('%H:%M:%S')}",
+            f"📁 Файлов к обработке: {len(self.state.batch_mappings)}",
+            f"🔗 Таблица: {self.google_url_input.text().strip()[:50]}..."
+        ]
+        self.logger.open(header)
+
+        self.logic.start_batch_processing(
+            self.state.batch_mappings,
+            self.google_url_input.text().strip(),
             self.update_progress,
             self.log_message,
             self.on_processing_finished,
@@ -459,7 +884,7 @@ class MainWindow(QMainWindow):
         self.check_ready_state()
 
         if added > 0:
-            self.log_message(f"✅ Добавлено файлов: {added}")
+            self.log_message(f"✅ Добавлено файлов: {added}", "success")
 
     def clear_batch_files(self):
         """Очищает список файлов для пакетной обработки"""
@@ -508,7 +933,7 @@ class MainWindow(QMainWindow):
         dialog = BatchMappingDialog(self.state.batch_files, google_sheets, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.state.batch_mappings = dialog.mappings
-            self.log_message(f"✅ Настроен маппинг для {len(self.state.batch_mappings)} файлов")
+            self.log_message(f"✅ Настроен маппинг для {len(self.state.batch_mappings)} файлов", "success")
             self.check_ready_state()
 
     def start_batch_processing(self):
@@ -518,8 +943,9 @@ class MainWindow(QMainWindow):
 
         self.disable_ui()
         self.show_progress()
-        self.log_text.clear()
+        self.sliding_log.clear_log()
 
+        # Создаем файл журнала ТОЛЬКО для копирования данных
         header = [
             f"🚀 Начало пакетной обработки: {datetime.now().strftime('%H:%M:%S')}",
             f"📁 Файлов к обработке: {len(self.state.batch_mappings)}",
@@ -554,15 +980,10 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.status_label.show()
 
-        # Автоматически показываем журнал при начале обработки
-        self.show_log()
-
     def hide_progress(self):
         """Скрывает прогресс-бар и статус"""
         self.progress_bar.setVisible(False)
         self.status_label.hide()
-
-        # Журнал остается открытым для просмотра результатов
 
     def update_progress(self, current: int, total: int, item_name: str):
         """Обновляет прогресс-бар"""
@@ -570,30 +991,39 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(progress)
         self.progress_bar.setFormat(f"{progress}% - {item_name}")
 
+        # Добавляем сообщение в лог о прогрессе
+        if progress > 0:
+            self.log_message(f"📊 Прогресс: {progress}% - {item_name}")
+
         if self.tabs.currentIndex() == 0:
             self.status_label.setText(f"📋 Обработано листов: {current}/{total}")
         else:
             self.status_label.setText(f"📁 Обработано файлов: {current}/{total}")
 
-    def log_message(self, message: str):
+    def log_message(self, message: str, message_type: str = "info"):
         """Добавляет сообщение в журнал"""
-        formatted = self.logger.log(message)
+        formatted = self.logger.log(message) if hasattr(self.logger,
+                                                        'log_file_path') and self.logger.log_file_path else f"[{datetime.now().strftime('%H:%M:%S')}] {message}"
+
+        # Определяем тип сообщения для правильного отображения
+        if "ОШИБКА" in message or "ERROR" in message:
+            message_type = "error"
+        elif "⚠️" in message or "WARNING" in message:
+            message_type = "warning"
+        elif "✅" in message or "✓" in message or "🎉" in message:
+            message_type = "success"
 
         # Обработка специальных типов сообщений с ссылками
         if message.startswith("📋 Ссылка:"):
             url = message.split(": ", 1)[1]
-            html_message = f'{formatted.split("] ", 1)[0]}] 📋 Ссылка: <a href="{url}">{url}</a>'
-            self.log_text.append(html_message)
+            html_message = f'{formatted.split("] ", 1)[0]}] 📋 Ссылка: <a href="{url}" style="color: #007bff; text-decoration: underline;">{url}</a>'
+            self.sliding_log.add_log_message(html_message, message_type)
         elif message.startswith("💾 Сохранено:"):
             path = message.split(": ", 1)[1]
-            html_message = f'{formatted.split("] ", 1)[0]}] 💾 Сохранено: <a href="file://{path}">{path}</a>'
-            self.log_text.append(html_message)
+            html_message = f'{formatted.split("] ", 1)[0]}] 💾 Сохранено: <a href="file://{path}" style="color: #007bff; text-decoration: underline;">{path}</a>'
+            self.sliding_log.add_log_message(html_message, message_type)
         else:
-            self.log_text.append(formatted)
-
-        # Автопрокрутка к концу
-        scrollbar = self.log_text.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+            self.sliding_log.add_log_message(formatted, message_type)
 
     def on_processing_finished(self):
         """Обработчик успешного завершения операции"""
@@ -601,7 +1031,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setFormat("✅ Операция завершена!")
         self.status_label.setText("🎉 Успешно завершено")
         self.logger.close()
-        self.log_message("🎉 Операция выполнена успешно!")
+        self.log_message("🎉 Операция выполнена успешно!", "success")
 
         # Скрываем прогресс через 3 секунды
         QTimer.singleShot(3000, self.hide_progress)
@@ -621,7 +1051,7 @@ class MainWindow(QMainWindow):
 
     def on_processing_error(self, error_message: str):
         """Обработчик ошибки операции"""
-        self.log_message(f"💥 ОШИБКА: {error_message}")
+        self.log_message(f"💥 ОШИБКА: {error_message}", "error")
         self.hide_progress()
         self.logger.close()
         self.enable_ui()
@@ -650,20 +1080,16 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
-    # Настройка глобальной палитры цветов
-    palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(255, 255, 255))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor(31, 41, 55))
-    palette.setColor(QPalette.ColorRole.Base, QColor(249, 250, 251))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(229, 231, 235))
-    palette.setColor(QPalette.ColorRole.Text, QColor(31, 41, 55))
-    palette.setColor(QPalette.ColorRole.Button, QColor(249, 250, 251))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor(31, 41, 55))
-    palette.setColor(QPalette.ColorRole.BrightText, QColor(255, 255, 255))
-    palette.setColor(QPalette.ColorRole.Link, QColor(37, 99, 235))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor(37, 99, 235))
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
-    app.setPalette(palette)
+    # Простая настройка палитры без лишних стилей
+    app.setStyleSheet("""
+        QMainWindow {
+            background: white;
+        }
+        QWidget {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+        }
+    """)
 
     # Создание и отображение окна
     window = MainWindow()

@@ -12,8 +12,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 import io
 
-from config import Config, load_config, BASE_DIR
-from logic.sheet_utils import copy_sheet_data, clear_column_cache
+from .config import Config, load_config, BASE_DIR
+from .logic.sheet_utils import copy_sheet_data, clear_column_cache
 
 
 class ExcelToGoogleSheets:

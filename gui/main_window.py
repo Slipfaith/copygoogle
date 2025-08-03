@@ -11,11 +11,11 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer
 
-from app_logic import AppLogic
-from config import BASE_DIR, create_sample_config
-from log_service import LogService
-from state import AppState
-from link_storage import load_links, save_link
+from business.app_logic import AppLogic
+from business.config import BASE_DIR, create_sample_config
+from business.log_service import LogService
+from business.state import AppState
+from business.link_storage import load_links, save_link
 
 from .dialogs import BatchMappingDialog, MappingDialog, DownloadDialog
 from . import styles

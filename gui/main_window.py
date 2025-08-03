@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QLineEdit, QProgressBar,
     QListWidget, QListWidgetItem, QTabWidget, QMessageBox, QFileDialog,
-    QDialog, QFrame, QSpacerItem, QSizePolicy
+    QDialog, QFrame, QSpacerItem, QSizePolicy, QComboBox, QInputDialog
 )
 from PySide6.QtCore import Qt, QTimer
 
@@ -15,6 +15,7 @@ from app_logic import AppLogic
 from config import BASE_DIR, create_sample_config
 from log_service import LogService
 from state import AppState
+from link_storage import load_links, save_link
 
 from .dialogs import BatchMappingDialog, MappingDialog, DownloadDialog
 from . import styles
@@ -172,10 +173,49 @@ class MainWindow(QMainWindow):
         """)
         self.google_url_input.setFixedHeight(36)
 
+        # Сохраненные ссылки
+        saved_layout = QHBoxLayout()
+        self.saved_links_combo = QComboBox()
+        self.saved_links_combo.setPlaceholderText("Сохранённые ссылки")
+        self.saved_links_combo.currentIndexChanged.connect(self.on_saved_link_selected)
+        saved_layout.addWidget(self.saved_links_combo)
+
+        self.save_link_btn = QPushButton("💾 Сохранить")
+        self.save_link_btn.setFixedHeight(28)
+        self.save_link_btn.clicked.connect(self.save_current_link)
+        saved_layout.addWidget(self.save_link_btn)
+
         url_layout.addWidget(url_label)
         url_layout.addWidget(self.google_url_input)
+        url_layout.addLayout(saved_layout)
 
         parent_layout.addWidget(url_container)
+        self.load_saved_links()
+
+    def load_saved_links(self):
+        links = load_links()
+        self.saved_links_combo.blockSignals(True)
+        self.saved_links_combo.clear()
+        for name, url in links.items():
+            self.saved_links_combo.addItem(name, url)
+        self.saved_links_combo.setCurrentIndex(-1)
+        self.saved_links_combo.blockSignals(False)
+
+    def on_saved_link_selected(self, index: int):
+        url = self.saved_links_combo.itemData(index)
+        if url:
+            self.google_url_input.setText(url)
+
+    def save_current_link(self):
+        url = self.google_url_input.text().strip()
+        if not url:
+            QMessageBox.warning(self, "Ошибка", "Введите ссылку перед сохранением")
+            return
+        name, ok = QInputDialog.getText(self, "Сохранить ссылку", "Название:")
+        if ok and name:
+            save_link(name, url)
+            self.load_saved_links()
+            self.saved_links_combo.setCurrentText(name)
 
     def create_tabs_section(self, parent_layout):
         """Создает секцию с табами"""

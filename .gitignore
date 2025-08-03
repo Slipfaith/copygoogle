@@ -50,6 +50,7 @@ pytest_cache/
 
 # Excel/Word temp
 ~$*
+*.xlsx
 
 # Text, JSON, YAML
 *.txt

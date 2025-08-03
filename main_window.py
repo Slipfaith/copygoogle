@@ -8,7 +8,7 @@ from typing import Optional, Dict, List, Tuple
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QTextEdit, QProgressBar, QLabel, QFrame,
+    QPushButton, QTextEdit, QTextBrowser, QProgressBar, QLabel, QFrame,
     QMessageBox, QFileDialog, QLineEdit, QDialog, QDialogButtonBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
     QGroupBox, QSpinBox, QTabWidget, QListWidget, QListWidgetItem,
@@ -24,7 +24,7 @@ from dialogs import BatchMappingDialog, MappingDialog, DropArea, DownloadDialog
 BASE_DIR = Path(__file__).resolve().parent
 
 
-class ClickableTextEdit(QTextEdit):
+class ClickableTextEdit(QTextBrowser):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setOpenLinks(False)

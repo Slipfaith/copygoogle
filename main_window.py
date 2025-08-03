@@ -5,7 +5,7 @@ from typing import List
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QLineEdit, QProgressBar, QCheckBox,
+    QPushButton, QLabel, QLineEdit, QProgressBar,
     QListWidget, QListWidgetItem, QTabWidget, QMessageBox, QFileDialog,
     QDialog
 )
@@ -47,7 +47,6 @@ class MainWindow(QMainWindow):
 
         self.create_title_section()
         self.create_url_section()
-        self.create_backup_section()
         self.create_tabs()
         self.create_progress_section()
         self.create_log_section()
@@ -95,20 +94,6 @@ class MainWindow(QMainWindow):
         url_layout.addLayout(url_btns_layout)
         url_container.setLayout(url_layout)
         self.layout.addWidget(url_container)
-
-    def create_backup_section(self):
-        backup_container = QWidget()
-        backup_layout = QHBoxLayout()
-        backup_layout.setContentsMargins(0, 0, 0, 0)
-
-        self.backup_checkbox = QCheckBox("🔒 Создать резервную копию перед вставкой данных")
-        self.backup_checkbox.setStyleSheet(styles.BACKUP_CHECKBOX_STYLE)
-        self.backup_checkbox.setChecked(True)
-
-        backup_layout.addWidget(self.backup_checkbox)
-        backup_layout.addStretch()
-        backup_container.setLayout(backup_layout)
-        self.layout.addWidget(backup_container)
 
     def create_tabs(self):
         self.tabs = QTabWidget()
@@ -348,7 +333,6 @@ class MainWindow(QMainWindow):
             self.state.single_file,
             self.google_url_input.text().strip(),
             self.state.single_config,
-            self.backup_checkbox.isChecked(),
             self.update_progress,
             self.log_message,
             self.on_processing_finished,
@@ -431,7 +415,6 @@ class MainWindow(QMainWindow):
         self.logic.start_batch_processing(
             self.state.batch_mappings,
             self.google_url_input.text().strip(),
-            self.backup_checkbox.isChecked(),
             self.update_progress,
             self.log_message,
             self.on_processing_finished,
@@ -442,7 +425,6 @@ class MainWindow(QMainWindow):
         self.tabs.setEnabled(False)
         self.google_url_input.setEnabled(False)
         self.download_btn.setEnabled(False)
-        self.backup_checkbox.setEnabled(False)
         self.single_mapping_btn.setEnabled(False)
         self.single_process_btn.setEnabled(False)
         self.batch_mapping_btn.setEnabled(False)
@@ -451,7 +433,6 @@ class MainWindow(QMainWindow):
     def enable_ui(self):
         self.tabs.setEnabled(True)
         self.google_url_input.setEnabled(True)
-        self.backup_checkbox.setEnabled(True)
         self.check_ready_state()
 
     def show_progress(self):

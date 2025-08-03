@@ -30,7 +30,6 @@ class WorkerThread(QThread):
                 excel_path = self.kwargs['excel_path']
                 google_sheet_url = self.kwargs['google_sheet_url']
                 config = self.kwargs['config']
-                create_backup = self.kwargs.get('create_backup', False)
 
                 self.processor.update_config(
                     sheet_mapping=config['sheet_mapping'],
@@ -41,9 +40,6 @@ class WorkerThread(QThread):
                 self.log_message.emit("Подключение к Google Таблицам...")
                 self.processor.connect_to_google_sheets(google_sheet_url)
 
-                if create_backup:
-                    self.processor.backup_google_sheet(log_callback=self.log_message.emit)
-
                 self.processor.process_excel_file(
                     excel_path,
                     progress_callback=self.progress_update.emit,
@@ -53,11 +49,6 @@ class WorkerThread(QThread):
             elif self.mode == "batch":
                 file_mappings = self.kwargs['file_mappings']
                 google_sheet_url = self.kwargs['google_sheet_url']
-                create_backup = self.kwargs.get('create_backup', False)
-
-                if create_backup:
-                    self.processor.connect_to_google_sheets(google_sheet_url)
-                    self.processor.backup_google_sheet(log_callback=self.log_message.emit)
 
                 self.processor.process_multiple_excel_files(
                     file_mappings,
@@ -110,7 +101,6 @@ class AppLogic:
         excel_path: str,
         google_url: str,
         config: Dict,
-        create_backup: bool,
         progress_cb: Callable[[int, int, str], None],
         log_cb: Callable[[str], None],
         finished_cb: Callable[[], None],
@@ -121,7 +111,6 @@ class AppLogic:
             excel_path=excel_path,
             google_sheet_url=google_url,
             config=config,
-            create_backup=create_backup,
         )
         self._connect_worker_signals(progress_cb, log_cb, finished_cb, error_cb)
         self.worker_thread.start()
@@ -130,7 +119,6 @@ class AppLogic:
         self,
         file_mappings: List[Dict[str, str]],
         google_url: str,
-        create_backup: bool,
         progress_cb: Callable[[int, int, str], None],
         log_cb: Callable[[str], None],
         finished_cb: Callable[[], None],
@@ -140,7 +128,6 @@ class AppLogic:
             mode="batch",
             file_mappings=file_mappings,
             google_sheet_url=google_url,
-            create_backup=create_backup,
         )
         self._connect_worker_signals(progress_cb, log_cb, finished_cb, error_cb)
         self.worker_thread.start()
